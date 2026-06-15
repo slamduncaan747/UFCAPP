@@ -17,7 +17,7 @@ const field: React.CSSProperties = {
   background: "var(--surface-2)",
   color: "var(--text)",
   fontSize: 16, 
-  fontFamily: "var(--font-body)",
+  fontFamily: "var(--font-body)" ,
   outline: "none",
   WebkitAppearance: "none",
 };
