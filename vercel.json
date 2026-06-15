@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/sync-ufc-data",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/jobs/snapshot-events",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
