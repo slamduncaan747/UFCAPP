@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/session";
-import { getMembership, getDraftByLeagueId } from "@/lib/db/queries";
+import { getMembership, getDraftByLeagueId, getLeagueMembers } from "@/lib/db/queries";
 import { db } from "@/lib/db";
 import {
   drafts, draftPicks, rosters, transactions, leagues, leagueMemberships, fighters,
@@ -9,6 +9,7 @@ import { eq, and } from "drizzle-orm";
 import { getMemberForPick, getRound, getTotalPicks, resolveSlot } from "@/lib/draft/snake";
 import { nanoid } from "@/lib/utils/nanoid";
 import { createClient } from "@/lib/supabase/server";
+import { notifyUser } from "@/lib/push/send";
 
 export async function POST(
   request: Request,
@@ -132,6 +133,35 @@ export async function POST(
       event: isDraftComplete ? "draft:complete" : "draft:picked",
       payload: { pickNumber, fighterId, slot, membershipId: membership.id, nextPick: nextPickNumber },
     });
+
+    // Push notifications (fire-and-forget)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const draftUrl = `${appUrl}/leagues/${leagueId}/draft`;
+    if (isDraftComplete) {
+      const members = await getLeagueMembers(leagueId);
+      await Promise.allSettled(
+        members.map(m =>
+          notifyUser(m.membership.userId, "results_posted", { leagueId }, {
+            title: "Draft Complete!",
+            body: "Rosters are set. Let the season begin.",
+            url: `${appUrl}/leagues/${leagueId}?tab=team`,
+          })
+        )
+      );
+    } else {
+      // Notify only the next on-clock member (skip if they have autodraft on)
+      const [nextMembership] = await db
+        .select()
+        .from(leagueMemberships)
+        .where(eq(leagueMemberships.id, getMemberForPick(nextPickNumber, draft.draftOrder as string[])));
+      if (nextMembership && !nextMembership.autodraftEnabled) {
+        await notifyUser(nextMembership.userId, "pick_on_clock", { leagueId, pickNumber: nextPickNumber }, {
+          title: "You're on the clock!",
+          body: `Pick ${nextPickNumber + 1} — make your selection.`,
+          url: draftUrl,
+        });
+      }
+    }
 
     return NextResponse.json({ ok: true, isDraftComplete });
   } catch (err: any) {

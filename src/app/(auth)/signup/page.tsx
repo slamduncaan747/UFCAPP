@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import OAuthButtons from "../OAuthButtons";
 
 const field: React.CSSProperties = {
   display: "block",
@@ -138,6 +139,8 @@ export default function SignupPage() {
           {loading ? "Creating account…" : "Create Account"}
         </button>
       </form>
+
+      <OAuthButtons />
 
       <div style={{ marginTop: "auto", paddingTop: 32, textAlign: "center" }}>
         <span style={{ color: "var(--text-3)", fontSize: 14 }}>Already have an account? </span>

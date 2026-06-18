@@ -1,0 +1,48 @@
+name: Scheduled jobs
+
+# Replaces Vercel Cron. These hit the app's POST job endpoints with the
+# x-cron-secret header that the route handlers verify.
+#
+# Required repo config (Settings → Secrets and variables → Actions):
+#   Variable APP_URL     e.g. https://your-app.vercel.app
+#   Secret   CRON_SECRET must match the CRON_SECRET env var on the deployment
+
+on:
+  schedule:
+    # snapshot-events: every 10 minutes (GitHub's minimum is ~5 min and may lag)
+    - cron: "*/10 * * * *"
+    # sync-ufc-data: daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run manually
+        type: choice
+        options: [snapshot-events, sync-ufc-data, both]
+        default: both
+
+jobs:
+  snapshot-events:
+    # Runs on the 10-min schedule, on manual "both"/"snapshot-events", never on the daily-only trigger
+    if: >-
+      github.event.schedule == '*/10 * * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job != 'sync-ufc-data')
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/jobs/snapshot-events
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.APP_URL }}/api/jobs/snapshot-events"
+
+  sync-ufc-data:
+    if: >-
+      github.event.schedule == '0 6 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job != 'snapshot-events')
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/jobs/sync-ufc-data
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.APP_URL }}/api/jobs/sync-ufc-data"

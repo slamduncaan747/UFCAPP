@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   title: "Fantasy UFC",
   description: "Season-long UFC fighter fantasy",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Fantasy UFC" },
+  manifest: "/manifest.webmanifest",
 };
 
 export const viewport: Viewport = {
@@ -18,6 +19,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+          }
+        `}} />
+      </head>
       <body style={{ background: "var(--bg)" }}>
         {children}
         <Toaster

@@ -1,6 +1,6 @@
 import { requireProfile } from "@/lib/auth/session";
 import {
-  getLeagueById, getMembership, getLeagueMembers, getStandings,
+  getLeagueById, getMembership, getLeagueMembers, getStandings, getDraftByLeagueId,
 } from "@/lib/db/queries";
 import { redirect, notFound } from "next/navigation";
 import { AppHeader } from "@/components/shared/Header";
@@ -12,6 +12,7 @@ import { MarketplaceTab } from "@/components/league/MarketplaceTab";
 import { FightsTab } from "@/components/league/FightsTab";
 import { SettingsTab } from "@/components/league/SettingsTab";
 import { ScoresTab } from "@/components/league/ScoresTab";
+import { DraftBanner } from "@/components/league/DraftBanner";
 
 type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 
@@ -28,9 +29,10 @@ export default async function LeaguePage({ params, searchParams }: PageProps) {
   if (!league) notFound();
   if (!membership) redirect("/dashboard");
 
-  const [standings, members] = await Promise.all([
+  const [standings, members, draft] = await Promise.all([
     getStandings(id),
     getLeagueMembers(id),
+    getDraftByLeagueId(id),
   ]);
   const myStanding = standings.find((s) => s.userId === profile.id);
   const teamPoints = myStanding?.totalPoints ?? 0;
@@ -45,6 +47,14 @@ export default async function LeaguePage({ params, searchParams }: PageProps) {
       />
 
       <main style={{ maxWidth: 480, margin: "0 auto", padding: "16px 16px", paddingBottom: "calc(var(--nav-h) + var(--sab) + 16px)" }}>
+        <DraftBanner
+          leagueId={id}
+          leagueStatus={league.status}
+          draftStatus={draft?.status ?? null}
+          currentPickNumber={draft?.currentPickNumber ?? 0}
+          totalPicks={members.length * 9}
+          isCommissioner={membership.role === "commissioner"}
+        />
         {tab === "team" && (
           <TeamTab leagueId={id} membershipId={membership.id} userId={profile.id} leagueStatus={league.status} />
         )}

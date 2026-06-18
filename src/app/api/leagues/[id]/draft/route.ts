@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/session";
 import { getMembership, getDraftByLeagueId, getDraftPicks, getLeagueMembers, getDraftQueue } from "@/lib/db/queries";
 import { db } from "@/lib/db";
-import { fighters, rosters } from "@/lib/db/schema";
-import { eq, and, notInArray } from "drizzle-orm";
+import { fighters, bouts, events } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 export async function GET(
@@ -23,9 +23,9 @@ export async function GET(
     const members = await getLeagueMembers(leagueId);
     const queue = await getDraftQueue(membership.id);
 
-    // Available fighters = all active male fighters NOT yet drafted
+    // Available fighters = all active male fighters NOT yet drafted, enriched with upcoming bout info
     const draftedIds = picks.filter(p => p.pick.fighterId).map(p => p.pick.fighterId!);
-    const availableFighters = await db
+    const rawFighters = await db
       .select()
       .from(fighters)
       .where(
@@ -37,7 +37,39 @@ export async function GET(
             : sql`1=1`
         )
       )
-      .orderBy(fighters.currentRanking, fighters.name);
+      .orderBy(desc(fighters.draftScore), fighters.name);
+
+    // Attach upcoming bout data (next 90 days)
+    const now = new Date();
+    const in90Days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const upcomingBouts = await db
+      .select({ fighterAId: bouts.fighterAId, fighterBId: bouts.fighterBId, eventDate: events.eventDate })
+      .from(bouts)
+      .innerJoin(events, eq(bouts.eventId, events.id))
+      .where(
+        and(
+          eq(bouts.status, "scheduled"),
+          sql`${events.eventDate} >= ${now.toISOString()}`,
+          sql`${events.eventDate} <= ${in90Days.toISOString()}`
+        )
+      );
+
+    const upcomingMap = new Map<string, Date>();
+    for (const b of upcomingBouts) {
+      for (const fid of [b.fighterAId, b.fighterBId]) {
+        if (!upcomingMap.has(fid) || b.eventDate < upcomingMap.get(fid)!) {
+          upcomingMap.set(fid, b.eventDate);
+        }
+      }
+    }
+
+    const availableFighters = rawFighters.map(f => {
+      const nextBoutDate = upcomingMap.get(f.id) ?? null;
+      const daysSinceLastFight = f.lastFightAt
+        ? Math.floor((now.getTime() - new Date(f.lastFightAt + "T12:00:00Z").getTime()) / 86_400_000)
+        : null;
+      return { ...f, hasUpcomingBout: !!nextBoutDate, nextBoutDate, daysSinceLastFight };
+    });
 
     return NextResponse.json({ draft, picks, members, queue, availableFighters });
   } catch (err: any) {

@@ -42,15 +42,33 @@ export async function TeamTab({ leagueId, membershipId, leagueStatus }: {
           borderRadius: 12,
           background: "var(--accent-wash)",
           border: "1px solid var(--accent-glow)",
-          color: "var(--accent)",
           fontSize: 14,
           fontWeight: 500,
           marginBottom: 16,
           lineHeight: 1.5,
         }}>
-          {leagueStatus === "setup"
-            ? "Your roster is filled during the draft. Waiting for the commissioner to start."
-            : "Draft in progress — head to the Draft Room to make your picks."}
+          <p style={{ color: "var(--accent)", margin: "0 0 10px" }}>
+            {leagueStatus === "setup"
+              ? "Your roster is filled during the draft. Waiting for the commissioner to start."
+              : "Draft in progress — head to the Draft Room to make your picks."}
+          </p>
+          <a
+            href={`/leagues/${leagueId}/draft`}
+            style={{
+              display: "inline-block",
+              background: "var(--accent)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 13,
+              padding: "8px 18px",
+              borderRadius: 9,
+              textDecoration: "none",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
+          >
+            {leagueStatus === "drafting" ? "Enter Draft Room →" : "Go to Draft Room →"}
+          </a>
         </div>
       )}
 

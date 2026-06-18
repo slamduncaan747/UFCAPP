@@ -154,6 +154,8 @@ export const fighters = pgTable("fighters", {
   photoLicense: text("photo_license"),
   photoAttribution: text("photo_attribution"),
   photoSource: text("photo_source"),
+  draftScore: real("draft_score"),
+  lastFightAt: date("last_fight_at"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -239,6 +241,7 @@ export const leagueMemberships = pgTable(
       .notNull()
       .defaultNow(),
     foughtDropUsed: boolean("fought_drop_used").notNull().default(false),
+    autodraftEnabled: boolean("autodraft_enabled").notNull().default(false),
   },
   (t) => [unique().on(t.leagueId, t.userId)]
 );
@@ -353,6 +356,21 @@ export const draftQueues = pgTable(
   },
   (t) => [unique().on(t.membershipId, t.fighterId)]
 );
+
+// ─── Push subscriptions ───────────────────────────────────────────────────────
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: text("id").primaryKey().default("gen_random_uuid()"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => profiles.id),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 

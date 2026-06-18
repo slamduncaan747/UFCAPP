@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { drafts, leagues } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
+import { notifyUser } from "@/lib/push/send";
 
 export async function POST(
   _: Request,
@@ -52,6 +53,20 @@ export async function POST(
       event: "draft:started",
       payload: { draftOrder: shuffled, clockExpiresAt: clockExpiry.toISOString() },
     });
+
+    // Notify all members
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    const league = await import("@/lib/db/queries").then(m => m.getLeagueById(leagueId));
+    const leagueName = league?.name ?? "your league";
+    await Promise.allSettled(
+      members.map(m =>
+        notifyUser(m.membership.userId, "draft_starting", { leagueId }, {
+          title: "Draft Starting!",
+          body: `The snake draft for ${leagueName} is live. It's go time.`,
+          url: `${appUrl}/leagues/${leagueId}/draft`,
+        })
+      )
+    );
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {

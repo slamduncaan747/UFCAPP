@@ -3,7 +3,7 @@ import {
   leagues, leagueMemberships, rosters, fighters, events, bouts,
   scores, transactions, drafts, draftPicks, draftQueues, notifications, profiles,
 } from "./schema";
-import { eq, and, inArray, sql, desc, asc, isNull, lte } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, asc, lte, isNull } from "drizzle-orm";
 
 // ─── Profiles ──────────────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ export async function getFreeAgents(leagueId: string, weightClass?: string) {
         weightClass ? eq(fighters.weightClass, weightClass as any) : sql`1=1`
       )
     )
-    .orderBy(asc(fighters.currentRanking), asc(fighters.name));
+    .orderBy(desc(fighters.draftScore), asc(fighters.name));
 
   return query;
 }

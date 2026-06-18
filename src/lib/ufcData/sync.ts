@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { fighters, events, bouts } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
+import { computeDraftScore } from "@/lib/draft/score";
 import { fetchAll } from "./client";
 import { mapWeightClass, mapMethod, isWomensBout, type WeightClass } from "./mapping";
 import type { DataEvent, DataFighter, DataFight } from "./types";
@@ -91,6 +92,10 @@ export async function syncUfcData(): Promise<SyncResult> {
 
     qualifyingFighterIds.add(f.id);
     fighterDivision.set(f.id, wc);
+    const draftScore = computeDraftScore(
+      { recordW: f.wins ?? 0, recordL: f.losses ?? 0, recordD: f.draws ?? 0, isChampion: false, currentRanking: null },
+      last
+    );
     fighterRows.push({
       id: f.id,
       externalId: f.id,
@@ -119,6 +124,8 @@ export async function syncUfcData(): Promise<SyncResult> {
       photoLicense: f.photo_license,
       photoAttribution: f.photo_attribution,
       photoSource: f.photo_source,
+      draftScore,
+      lastFightAt: last,
       updatedAt: new Date(),
     });
   }
@@ -226,6 +233,8 @@ export async function syncUfcData(): Promise<SyncResult> {
           photoLicense: sql`excluded.photo_license`,
           photoAttribution: sql`excluded.photo_attribution`,
           photoSource: sql`excluded.photo_source`,
+          draftScore: sql`excluded.draft_score`,
+          lastFightAt: sql`excluded.last_fight_at`,
           updatedAt: sql`excluded.updated_at`,
         },
       });
