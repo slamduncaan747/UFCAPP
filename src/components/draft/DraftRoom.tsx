@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,19 @@ type DraftState = {
   queue: any[];
   availableFighters: any[];
 };
+
+const WEIGHT_CLASSES = ["FLW", "BW", "FW", "LW", "WW", "MW", "LHW", "HW"] as const;
+
+function chipStyle(active: boolean): CSSProperties {
+  return {
+    padding: "0 12px", height: 32, borderRadius: 9, cursor: "pointer",
+    background: active ? "var(--ufc-accent)" : "var(--ufc-surface)",
+    border: `1px solid ${active ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
+    color: active ? "#fff" : "var(--ufc-text-2)",
+    fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5,
+    flexShrink: 0, whiteSpace: "nowrap",
+  };
+}
 
 type Props = {
   leagueId: string;
@@ -42,16 +55,58 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
   const [autodraft, setAutodraft] = useState(initialAutodraft);
   const [autodraftSaving, setAutodraftSaving] = useState(false);
   const [filterUpcoming, setFilterUpcoming] = useState(false);
+  const [divFilter, setDivFilter] = useState<string | null>(null);
+  const [rankedOnly, setRankedOnly] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const stateRef = useRef<DraftState | null>(null);
+  const tickingRef = useRef(false);
   const supabase = createClient();
 
   const loadState = useCallback(async () => {
     const res = await fetch(`/api/leagues/${leagueId}/draft`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      // No draft configured or transient error — render the lobby instead of
+      // hanging on the loading spinner forever.
+      setState((prev) => prev ?? { draft: null, picks: [], members: [], queue: [], availableFighters: [] });
+      return;
+    }
     const data = await res.json();
     setState(data);
     setDraftStatus(data.draft?.status ?? initialDraftStatus);
   }, [leagueId]);
+
+  // Keep a ref of the latest state for the tick interval (avoids stale closures).
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Ping the server to advance the draft when the clock expires or the on-clock
+  // member has auto-draft on. Runs on every client; the endpoint is idempotent.
+  const triggerTick = useCallback(async () => {
+    if (tickingRef.current) return;
+    tickingRef.current = true;
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/draft/tick`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (data?.changed) await loadState();
+    } catch { /* transient — next interval retries */ } finally {
+      tickingRef.current = false;
+    }
+  }, [leagueId, loadState]);
+
+  useEffect(() => {
+    if (draftStatus !== "in_progress") return;
+    const interval = setInterval(() => {
+      const d = stateRef.current?.draft;
+      if (!d || d.status !== "in_progress") return;
+      const order = (d.draftOrder ?? []) as string[];
+      if (!order.length) return;
+      const onClockId = getMemberForPick(d.currentPickNumber, order);
+      const onClock = stateRef.current!.members.find((m: any) => m.membership.id === onClockId);
+      const autoOn = onClock?.membership.autodraftEnabled ?? false;
+      const expired = d.clockExpiresAt ? Date.now() >= new Date(d.clockExpiresAt).getTime() : false;
+      if (autoOn || expired) triggerTick();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [draftStatus, triggerTick]);
 
   useEffect(() => {
     loadState();
@@ -175,6 +230,8 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
   let filtered = availableFighters.filter((f: any) =>
     f.name.toLowerCase().includes(search.toLowerCase())
   );
+  if (divFilter) filtered = filtered.filter((f: any) => f.weightClass === divFilter);
+  if (rankedOnly) filtered = filtered.filter((f: any) => f.isChampion || f.currentRanking != null);
   if (filterUpcoming) filtered = filtered.filter((f: any) => f.hasUpcomingBout);
 
   const onClockMember = members.find((m: any) => m.membership.id === onClockMembershipId);
@@ -195,19 +252,53 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
       {/* Pre-draft: not started */}
       {draftStatus === "scheduled" && (
         <div className="flex-1 flex items-center justify-center px-4">
-          <div className="text-center max-w-sm">
+          <div className="text-center max-w-sm w-full">
             <TrophyIcon size={48} style={{ color: "var(--ufc-accent)", margin: "0 auto 16px" }} />
-            <h2 className="font-display font-bold text-2xl uppercase mb-2">Draft Not Started</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--ufc-text-2)" }}>
-              {members.length} member{members.length !== 1 ? "s" : ""} in the league.
-              {isCommissioner ? " When ready, start the snake draft." : " Waiting for the commissioner to start."}
+            <h2 className="font-display font-bold text-2xl uppercase mb-2">Draft Lobby</h2>
+            <p className="text-sm mb-5" style={{ color: "var(--ufc-text-2)" }}>
+              {members.length} member{members.length !== 1 ? "s" : ""} ready.
+              {isCommissioner ? " When everyone's in, start the snake draft." : " Waiting for the commissioner to start."}
             </p>
-            {isCommissioner && (
-              <Button onClick={handleStartDraft} disabled={starting}
+
+            {/* Member list so the lobby isn't a dead end */}
+            <div className="ufc-surface rounded-xl p-3 mb-6 text-left">
+              <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ufc-text-3)" }}>
+                In the Room
+              </div>
+              {members.length === 0 && (
+                <p className="text-xs" style={{ color: "var(--ufc-text-3)" }}>No members yet.</p>
+              )}
+              <div className="space-y-1.5">
+                {members.map((m: any) => (
+                  <div key={m.membership.id} className="flex items-center gap-2 text-sm">
+                    <span style={{
+                      width: 7, height: 7, borderRadius: "50%",
+                      background: "var(--ufc-accent)", flexShrink: 0,
+                    }} />
+                    <span className="truncate font-bold" style={{ color: "var(--ufc-text)" }}>
+                      {m.membership.teamName ?? m.profile?.displayName ?? "Team"}
+                    </span>
+                    {m.membership.id === membershipId && (
+                      <span style={{ fontSize: 10, color: "var(--ufc-accent)", fontWeight: 700 }}>YOU</span>
+                    )}
+                    {m.membership.role === "commissioner" && (
+                      <span style={{ fontSize: 10, color: "var(--ufc-text-3)", fontWeight: 700 }}>COMMISH</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {isCommissioner ? (
+              <Button onClick={handleStartDraft} disabled={starting || !draft || members.length < 2}
                 className="font-display font-bold uppercase tracking-wider px-8 py-3"
                 style={{ background: "var(--ufc-accent)", color: "var(--ufc-accent-ink)" }}>
-                {starting ? "Starting…" : "Start Draft"}
+                {starting ? "Starting…" : !draft ? "Draft Not Configured" : members.length < 2 ? "Need 2+ Members" : "Start Draft"}
               </Button>
+            ) : (
+              <div className="text-sm" style={{ color: "var(--ufc-text-3)" }}>
+                ⏳ Hang tight — the draft will begin shortly.
+              </div>
             )}
           </div>
         </div>
@@ -328,19 +419,34 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
                     className="pl-9" style={{ background: "var(--ufc-surface-3)", border: "1px solid var(--ufc-border-2)", color: "var(--ufc-text)" }} />
                 </div>
                 <button
+                  onClick={() => setRankedOnly(!rankedOnly)}
+                  style={chipStyle(rankedOnly)}
+                  title="Show only ranked fighters & champions"
+                >
+                  ★ Ranked
+                </button>
+                <button
                   onClick={() => setFilterUpcoming(!filterUpcoming)}
-                  style={{
-                    padding: "0 12px", borderRadius: 9, cursor: "pointer",
-                    background: filterUpcoming ? "var(--ufc-accent)" : "var(--ufc-surface)",
-                    border: `1px solid ${filterUpcoming ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
-                    color: filterUpcoming ? "#fff" : "var(--ufc-text-2)",
-                    fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0,
-                  }}
+                  style={chipStyle(filterUpcoming)}
                   title="Show only fighters with upcoming bouts"
                 >
                   ⚡ Soon
                 </button>
               </div>
+              {/* Weight-class filter chips */}
+              <div style={{ display: "flex", gap: 5, marginBottom: 8, overflowX: "auto", flexShrink: 0, paddingBottom: 2 }}>
+                <button onClick={() => setDivFilter(null)} style={chipStyle(divFilter === null)}>All</button>
+                {WEIGHT_CLASSES.map((wc) => (
+                  <button key={wc} onClick={() => setDivFilter(divFilter === wc ? null : wc)} style={chipStyle(divFilter === wc)}>
+                    {wc}
+                  </button>
+                ))}
+              </div>
+              {filtered.length === 0 && (
+                <p style={{ fontSize: 12, color: "var(--ufc-text-3)", padding: "12px 2px" }}>
+                  No fighters match these filters.
+                </p>
+              )}
               <div className="flex-1 overflow-y-auto space-y-1.5">
                 {filtered.map((f: any) => (
                   <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl"

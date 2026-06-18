@@ -16,11 +16,16 @@ export async function GET(
     const membership = await getMembership(leagueId, user.id);
     if (!membership) return NextResponse.json({ error: "Not a member" }, { status: 403 });
 
+    const members = await getLeagueMembers(leagueId);
+
     const draft = await getDraftByLeagueId(leagueId);
-    if (!draft) return NextResponse.json({ error: "No draft found" }, { status: 404 });
+    // No draft row yet (or not configured): return a usable shell so the room
+    // renders the pre-draft lobby instead of getting stuck loading.
+    if (!draft) {
+      return NextResponse.json({ draft: null, picks: [], members, queue: [], availableFighters: [] });
+    }
 
     const picks = await getDraftPicks(draft.id);
-    const members = await getLeagueMembers(leagueId);
     const queue = await getDraftQueue(membership.id);
 
     // Available fighters = all active male fighters NOT yet drafted, enriched with upcoming bout info
