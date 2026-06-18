@@ -280,6 +280,13 @@ body::before {
 }
 .rise-in { animation: rise-in 0.4s cubic-bezier(0.22,1,0.36,1) both; }
 
+/* Draft clock running-out warning */
+@keyframes clock-warn {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,78,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(255,59,78,0.35); }
+}
+.clock-warn { animation: clock-warn 1s ease-in-out infinite; border-color: var(--ufc-live, #ff3b4e) !important; }
+
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar          { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track    { background: transparent; }

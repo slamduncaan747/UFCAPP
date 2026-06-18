@@ -57,10 +57,30 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
   const [filterUpcoming, setFilterUpcoming] = useState(false);
   const [divFilter, setDivFilter] = useState<string | null>(null);
   const [rankedOnly, setRankedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<"score" | "name" | "rank">("score");
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef<DraftState | null>(null);
   const tickingRef = useRef(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const lastBeepRef = useRef<number | null>(null);
   const supabase = createClient();
+
+  // Short beep via Web Audio — no asset needed. Used for the final-10s warning.
+  const beep = useCallback(() => {
+    try {
+      const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = audioCtxRef.current ?? (audioCtxRef.current = new Ctx());
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.17);
+    } catch { /* audio blocked — non-critical */ }
+  }, []);
 
   const loadState = useCallback(async () => {
     const res = await fetch(`/api/leagues/${leagueId}/draft`);
@@ -148,18 +168,24 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
     registerPush();
   }, []);
 
-  // Clock countdown
+  // Clock countdown + final-10s warning beep (only when it's your pick).
   useEffect(() => {
-    if (!state?.draft?.clockExpiresAt) { setTimeLeft(null); return; }
+    if (!state?.draft?.clockExpiresAt) { setTimeLeft(null); lastBeepRef.current = null; return; }
     if (timerRef.current) clearInterval(timerRef.current);
+    const order = (state.draft.draftOrder ?? []) as string[];
+    const myTurn = order.length > 0 && getMemberForPick(state.draft.currentPickNumber, order) === membershipId;
     const tick = () => {
       const diff = Math.max(0, Math.floor((new Date(state.draft.clockExpiresAt).getTime() - Date.now()) / 1000));
       setTimeLeft(diff);
+      if (myTurn && diff > 0 && diff <= 10 && lastBeepRef.current !== diff) {
+        lastBeepRef.current = diff;
+        beep();
+      }
     };
     tick();
     timerRef.current = setInterval(tick, 500);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [state?.draft?.clockExpiresAt]);
+  }, [state?.draft?.clockExpiresAt, state?.draft?.currentPickNumber, membershipId, beep]);
 
   async function handlePick(fighterId: string) {
     setPicking(true);
@@ -233,6 +259,13 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
   if (divFilter) filtered = filtered.filter((f: any) => f.weightClass === divFilter);
   if (rankedOnly) filtered = filtered.filter((f: any) => f.isChampion || f.currentRanking != null);
   if (filterUpcoming) filtered = filtered.filter((f: any) => f.hasUpcomingBout);
+
+  const rankKey = (f: any) => (f.isChampion ? 0 : f.currentRanking != null ? f.currentRanking : 999);
+  filtered = [...filtered].sort((a: any, b: any) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    if (sortBy === "rank") return rankKey(a) - rankKey(b) || (b.draftScore ?? 0) - (a.draftScore ?? 0);
+    return (b.draftScore ?? 0) - (a.draftScore ?? 0); // score
+  });
 
   const onClockMember = members.find((m: any) => m.membership.id === onClockMembershipId);
 
@@ -326,7 +359,7 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
       {draftStatus === "in_progress" && (
         <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4 py-4 gap-4 overflow-hidden">
           {/* On-clock banner */}
-          <div className={`rounded-xl p-3 flex items-center justify-between ${isMyTurn ? "card-glow" : ""}`}
+          <div className={`rounded-xl p-3 flex items-center justify-between ${isMyTurn ? "card-glow" : ""} ${isMyTurn && timeLeft !== null && timeLeft <= 10 ? "clock-warn" : ""}`}
             style={{
               background: isMyTurn ? "var(--ufc-accent-wash)" : "var(--ufc-surface)",
               border: `1px solid ${isMyTurn ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
@@ -440,6 +473,13 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
                   <button key={wc} onClick={() => setDivFilter(divFilter === wc ? null : wc)} style={chipStyle(divFilter === wc)}>
                     {wc}
                   </button>
+                ))}
+              </div>
+              {/* Sort control */}
+              <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 10, color: "var(--ufc-text-3)", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>Sort</span>
+                {([["score", "★ Score"], ["rank", "# Rank"], ["name", "A–Z"]] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => setSortBy(key)} style={chipStyle(sortBy === key)}>{label}</button>
                 ))}
               </div>
               {filtered.length === 0 && (
