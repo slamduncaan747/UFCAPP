@@ -1,9 +1,20 @@
 import { getRoster, getFighterLockState } from "@/lib/db/queries";
 import { RosterSlot } from "@/components/roster/RosterSlot";
+import { DiagError } from "@/components/shared/DiagError";
 
 const ALL_SLOTS = ["FLW", "BW", "FW", "LW", "WW", "MW", "LHW", "HW", "WILDCARD"] as const;
 
-export async function TeamTab({ leagueId, membershipId, leagueStatus }: {
+export async function TeamTab(props: {
+  leagueId: string; membershipId: string; userId: string; leagueStatus: string;
+}) {
+  try {
+    return await TeamTabInner(props);
+  } catch (error) {
+    return <DiagError where="TeamTab" error={error} />;
+  }
+}
+
+async function TeamTabInner({ leagueId, membershipId, leagueStatus }: {
   leagueId: string; membershipId: string; userId: string; leagueStatus: string;
 }) {
   const rosterEntries = await getRoster(membershipId);
