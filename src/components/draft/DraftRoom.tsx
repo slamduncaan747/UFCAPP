@@ -299,7 +299,11 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
       setSelectedFighter(null);
       if (data.isDraftComplete) {
         toast.success("Draft complete! Rosters populated.");
-        router.push(`/leagues/${leagueId}?tab=team`);
+        // Show the completion screen instead of hard-navigating immediately —
+        // draft-end is the most server-stressed moment; let the user tap through
+        // when they're ready (the screen has a "View My Team" button).
+        setDraftStatus("completed");
+        await loadState();
       } else {
         await loadState();
       }
