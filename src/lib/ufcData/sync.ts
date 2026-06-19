@@ -144,6 +144,10 @@ export async function syncUfcData(): Promise<SyncResult> {
       fighterDivision.get(f.fighter1_id)!;
     const { method, isFinish } = mapMethod(f.method);
     const start = new Date(ev.date + "T12:00:00Z");
+    // A bout on a future-dated event with no recorded winner is upcoming, not
+    // completed. This lets the scraper feed future cards (upcoming bouts power
+    // the draft "Soon" filter, lineup planning, and the waiver wire).
+    const isUpcoming = start.getTime() > now && !f.winner_id;
 
     usedEventIds.add(f.event_id);
     boutRows.push({
@@ -157,11 +161,11 @@ export async function syncUfcData(): Promise<SyncResult> {
       cardSegment: "main" as const,
       boutOrder: 0,
       scheduledStart: start,
-      status: "completed" as const,
-      winnerId: f.winner_id && qualifyingFighterIds.has(f.winner_id) ? f.winner_id : null,
-      method: method as any,
-      isFinish,
-      endRound: f.round ?? null,
+      status: isUpcoming ? ("scheduled" as const) : ("completed" as const),
+      winnerId: !isUpcoming && f.winner_id && qualifyingFighterIds.has(f.winner_id) ? f.winner_id : null,
+      method: isUpcoming ? null : (method as any),
+      isFinish: isUpcoming ? false : isFinish,
+      endRound: isUpcoming ? null : (f.round ?? null),
     });
   }
 

@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { events, bouts, fighters } from "@/lib/db/schema";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { eq, and, lte } from "drizzle-orm";
+import { isAuthorizedCron } from "@/lib/jobs/cron-auth";
 
-function verifyCronSecret(request: Request) {
-  return request.headers.get("x-cron-secret") === process.env.CRON_SECRET;
-}
-
-export async function POST(request: Request) {
-  if (!verifyCronSecret(request)) {
+async function run(request: Request) {
+  if (!isAuthorizedCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -51,3 +48,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, eventsProcessed: eventsCrossingLock.length, boutsSnapshotted: snapshotted });
 }
+
+export const GET = run;
+export const POST = run;

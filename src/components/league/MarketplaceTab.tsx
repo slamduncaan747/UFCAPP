@@ -8,6 +8,7 @@ import { DivTag, RankTag } from "@/components/shared/Tags";
 import { SearchIcon, ClockIcon } from "@/components/shared/Icons";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { WaiverPanel } from "./WaiverPanel";
 
 const SLOTS = ["FLW", "BW", "FW", "LW", "WW", "MW", "LHW", "HW", "WILDCARD"] as const;
 const DIV_LABELS: Record<string, string> = {
@@ -82,6 +83,8 @@ export function MarketplaceTab({ leagueId, membershipId, leagueStatus }: { leagu
 
   return (
     <div className="space-y-4">
+      <WaiverPanel leagueId={leagueId} freeAgents={filtered} />
+
       <h2 className="font-display font-bold text-xl uppercase tracking-wide">Free Agents</h2>
 
       {/* Filters */}

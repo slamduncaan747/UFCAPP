@@ -100,6 +100,14 @@ export const draftStatusEnum = pgEnum("draft_status", [
   "completed",
 ]);
 
+export const waiverStatusEnum = pgEnum("waiver_status", [
+  "pending",
+  "won",
+  "lost",
+  "invalid",
+  "cancelled",
+]);
+
 export const notificationTypeEnum = pgEnum("notification_type", [
   "draft_starting",
   "lock_reminder",
@@ -355,6 +363,34 @@ export const draftQueues = pgTable(
     priority: integer("priority").notNull(),
   },
   (t) => [unique().on(t.membershipId, t.fighterId)]
+);
+
+// ─── Waiver wire ──────────────────────────────────────────────────────────────
+// Weekly blind-bid claims. Each team may submit up to 2 prioritized bids and win
+// at most one. Processed Monday morning in REVERSE draft order (the team that
+// drafted last gets first preference). The dropped fighter must already have
+// fought this season.
+export const waiverClaims = pgTable(
+  "waiver_claims",
+  {
+    id: text("id").primaryKey().default("gen_random_uuid()"),
+    leagueId: text("league_id").notNull().references(() => leagues.id),
+    membershipId: text("membership_id").notNull().references(() => leagueMemberships.id),
+    addFighterId: text("add_fighter_id").notNull().references(() => fighters.id),
+    dropFighterId: text("drop_fighter_id").notNull().references(() => fighters.id),
+    bidPriority: integer("bid_priority").notNull(), // 1 (preferred) or 2 (fallback)
+    status: waiverStatusEnum("status").notNull().default("pending"),
+    slot: slotEnum("slot"), // resolved slot, set when a claim is won
+    period: text("period").notNull(), // YYYY-MM-DD of the processing Monday
+    failureReason: text("failure_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique().on(t.membershipId, t.period, t.bidPriority),
+    index("waiver_claims_league_status_idx").on(t.leagueId, t.status),
+    index("waiver_claims_membership_idx").on(t.membershipId),
+  ]
 );
 
 // ─── Push subscriptions ───────────────────────────────────────────────────────
