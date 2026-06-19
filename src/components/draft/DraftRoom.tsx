@@ -8,9 +8,10 @@ import { Headshot } from "@/components/shared/Headshot";
 import { DivTag, RankTag } from "@/components/shared/Tags";
 import { SearchIcon, ClockIcon, TrophyIcon, BoltIcon } from "@/components/shared/Icons";
 import { toast } from "sonner";
-import { getMemberForPick, getRound, resolveSlot } from "@/lib/draft/snake";
+import { getMemberForPick, resolveSlot } from "@/lib/draft/snake";
 import { useRouter } from "next/navigation";
 import { QueuePanel } from "./QueuePanel";
+import { DraftFighterSheet } from "./DraftFighterSheet";
 
 type DraftState = {
   draft: any;
@@ -43,6 +44,15 @@ function winRate(f: any): number {
   return t > 0 ? (f.recordW ?? 0) / t : 0;
 }
 
+// How many picks until this member is on the clock again (0 = right now).
+function picksUntil(membershipId: string, currentPick: number, order: string[], totalPicks: number): number | null {
+  if (!order.length) return null;
+  for (let p = currentPick; p < totalPicks; p++) {
+    if (getMemberForPick(p, order) === membershipId) return p - currentPick;
+  }
+  return null;
+}
+
 type Props = {
   leagueId: string;
   membershipId: string;
@@ -69,6 +79,9 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
   const [needsOnly, setNeedsOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("score");
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
+  const [selectedFighter, setSelectedFighter] = useState<any | null>(null);
+  const [connLive, setConnLive] = useState(true);
+  const lastPickCountRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef<DraftState | null>(null);
   const tickingRef = useRef(false);
@@ -106,10 +119,21 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
       const queue = (data.queue ?? []).map((q: any) =>
         q?.queue ? { fighterId: q.queue.fighterId, priority: q.queue.priority } : q
       );
+      // Announce picks made by other teams since our last sync.
+      const picks: any[] = data.picks ?? [];
+      const prevCount = lastPickCountRef.current;
+      if (prevCount > 0 && picks.length > prevCount) {
+        const newest = picks[picks.length - 1];
+        if (newest?.fighter && newest.pick.membershipId !== membershipId) {
+          toast(`${newest.membership?.teamName ?? "A team"} drafted ${newest.fighter.name}`, { duration: 2500 });
+        }
+      }
+      lastPickCountRef.current = picks.length;
       setState({ ...data, queue });
+      setConnLive(true);
       if (data.draft?.status) setDraftStatus(data.draft.status);
     } catch { /* transient — polling/realtime will retry */ }
-  }, [leagueId]);
+  }, [leagueId, membershipId]);
 
   useEffect(() => { stateRef.current = state; }, [state]);
 
@@ -153,7 +177,10 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
       .on("broadcast", { event: "draft:resumed" }, () => { setDraftStatus("in_progress"); loadState(); })
       .on("broadcast", { event: "draft:config" }, () => loadState())
       .on("broadcast", { event: "draft:complete" }, () => { setDraftStatus("completed"); loadState(); })
-      .subscribe((status) => { if (status === "SUBSCRIBED") loadState(); });
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") { setConnLive(true); loadState(); }
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") setConnLive(false);
+      });
 
     const refresh = () => { if (document.visibilityState === "visible") loadState(); };
     window.addEventListener("focus", refresh);
@@ -257,6 +284,8 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
   const { picks, members, availableFighters } = state;
   const totalPicks = draftOrder.length * 9;
   const onClockMember = members.find((m: any) => m.membership.id === onClockMembershipId);
+  const myDistance = !isMyTurn ? picksUntil(membershipId, currentPickNumber, draftOrder, totalPicks) : 0;
+  const pickTimerSeconds = draft?.pickTimerSeconds ?? 60;
 
   async function handlePick(fighterId: string) {
     setPicking(true);
@@ -267,6 +296,7 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Pick failed");
+      setSelectedFighter(null);
       if (data.isDraftComplete) {
         toast.success("Draft complete! Rosters populated.");
         router.push(`/leagues/${leagueId}?tab=team`);
@@ -278,6 +308,20 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
     } finally {
       setPicking(false);
     }
+  }
+
+  async function toggleQueue(f: any) {
+    const exists = state!.queue.some((q) => q.fighterId === f.id);
+    const next = exists
+      ? state!.queue.filter((q) => q.fighterId !== f.id).map((q, i) => ({ ...q, priority: i }))
+      : [...state!.queue, { fighterId: f.id, priority: state!.queue.length }];
+    setState((prev) => prev ? { ...prev, queue: next } : prev);
+    toast.success(exists ? `Removed ${f.name} from queue` : `Queued ${f.name}`);
+    try {
+      await fetch(`/api/leagues/${leagueId}/draft/queue`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queue: next }),
+      });
+    } catch { toast.error("Failed to save queue"); }
   }
 
   async function handleStartDraft() {
@@ -440,7 +484,7 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--ufc-bg)" }}>
-      <RoomHeader pickLabel={`Pick ${Math.min(currentPickNumber + 1, totalPicks)}/${totalPicks}`} />
+      <RoomHeader pickLabel={`Pick ${Math.min(currentPickNumber + 1, totalPicks)}/${totalPicks}`} live={connLive} />
 
       {/* Paused overlay banner */}
       {isPaused && (
@@ -467,6 +511,11 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
               {isMyTurn ? "YOUR PICK" : (onClockMember?.membership.teamName ?? "—")}
             </div>
             {isMyTurn && autodraft && <div style={{ fontSize: 11, color: "var(--ufc-accent)", marginTop: 2 }}>Auto-draft will pick for you</div>}
+            {!isMyTurn && myDistance != null && !isPaused && (
+              <div style={{ fontSize: 11, color: "var(--ufc-text-3)", marginTop: 2 }}>
+                {myDistance === 1 ? "You're up next" : `${myDistance} picks until you · ~${Math.round((myDistance * pickTimerSeconds) / 60)}m`}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {timeLeft !== null && !isPaused && (
@@ -510,6 +559,28 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
         {/* ── PICK TAB ── */}
         {activeTab === "pick" && (
           <div className="flex-1 flex flex-col min-h-0">
+            {/* Best-available quick pick — only when you're on the clock */}
+            {isMyTurn && (() => {
+              const best = availableFighters[0];
+              const need = availableFighters.find((f: any) => !myUsedSlots.has(f.weightClass));
+              const rec = need ?? best;
+              if (!rec) return null;
+              return (
+                <div className="rounded-xl p-3 mb-2 flex items-center gap-3" style={{ background: "var(--ufc-accent-wash)", border: "1px solid var(--ufc-accent)" }}>
+                  <Headshot name={rec.name} photoUrl={rec.photoUrl} weightClass={rec.weightClass} size={36} />
+                  <div className="flex-1 min-w-0">
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--ufc-accent)" }}>
+                      {need ? `Best ${rec.weightClass} (fills need)` : "Best available"}
+                    </div>
+                    <div className="font-display font-bold text-sm uppercase truncate" style={{ color: "var(--ufc-text)" }}>{rec.name}</div>
+                  </div>
+                  <Button size="sm" onClick={() => handlePick(rec.id)} disabled={picking}
+                    style={{ background: "var(--ufc-accent)", color: "var(--ufc-accent-ink)" }}
+                    className="font-display font-bold uppercase text-xs flex-shrink-0">{picking ? "…" : "Draft"}</Button>
+                </div>
+              );
+            })()}
+
             {/* Roster-need strip */}
             {myMissingSlots.length > 0 && (
               <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 8, flexShrink: 0, overflowX: "auto" }}>
@@ -551,8 +622,8 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
                 const slot = resolveSlot(f.weightClass, myUsedSlots);
                 const fillsNeed = slot === f.weightClass;
                 return (
-                  <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl"
-                    style={{ background: "var(--ufc-surface)", border: `1px solid ${fillsNeed && isMyTurn ? "var(--ufc-accent)" : "var(--ufc-border)"}` }}>
+                  <div key={f.id} onClick={() => setSelectedFighter(f)} className="flex items-center gap-3 p-3 rounded-xl"
+                    style={{ background: "var(--ufc-surface)", border: `1px solid ${fillsNeed && isMyTurn ? "var(--ufc-accent)" : "var(--ufc-border)"}`, cursor: "pointer" }}>
                     <Headshot name={f.name} photoUrl={f.photoUrl} weightClass={f.weightClass} size={38} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -571,7 +642,7 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
                         {slot === "WILDCARD" && <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>→ WC</span>}
                       </div>
                     </div>
-                    <Button size="sm" onClick={() => handlePick(f.id)} disabled={!isMyTurn || picking || !slot}
+                    <Button size="sm" onClick={(e) => { e.stopPropagation(); handlePick(f.id); }} disabled={!isMyTurn || picking || !slot}
                       style={{
                         background: isMyTurn && slot ? "var(--ufc-accent)" : "var(--ufc-surface-3)",
                         color: isMyTurn && slot ? "var(--ufc-accent-ink)" : "var(--ufc-text-3)",
@@ -591,7 +662,7 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
               <StatBox label="Drafted" value={`${9 - myMissingSlots.length}/9`} />
               <StatBox label="Open Slots" value={`${myMissingSlots.length}`} />
             </div>
-            <RosterGrid roster={myRoster} />
+            <RosterGrid roster={myRoster} onSelect={setSelectedFighter} />
           </div>
         )}
 
@@ -599,14 +670,17 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
         {activeTab === "board" && (
           <div className="flex-1 overflow-auto">
             <DraftBoard draftOrder={draftOrder} members={members} picks={picks}
-              currentPickNumber={currentPickNumber} onClockMembershipId={onClockMembershipId} myId={membershipId} />
+              currentPickNumber={currentPickNumber} myId={membershipId} />
           </div>
         )}
 
         {/* ── ROSTERS TAB ── */}
         {activeTab === "rosters" && (
           <div className="flex-1 overflow-y-auto">
-            <div style={{ display: "flex", gap: 5, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+            {/* Live power ranking — cumulative draft score per team */}
+            <PowerRanking members={members} rostersByMember={rostersByMember} myId={membershipId}
+              onSelect={(id) => setViewTeamId(id)} selected={viewTeamId ?? membershipId} />
+            <div style={{ display: "flex", gap: 5, margin: "12px 0", overflowX: "auto", paddingBottom: 2 }}>
               {members.map((m: any) => {
                 const id = m.membership.id;
                 const active = (viewTeamId ?? membershipId) === id;
@@ -618,7 +692,7 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
                 );
               })}
             </div>
-            <RosterGrid roster={rostersByMember.get(viewTeamId ?? membershipId) ?? new Map()} />
+            <RosterGrid roster={rostersByMember.get(viewTeamId ?? membershipId) ?? new Map()} onSelect={setSelectedFighter} />
           </div>
         )}
 
@@ -633,19 +707,79 @@ export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraft
           </div>
         )}
       </div>
+
+      <DraftFighterSheet
+        fighter={selectedFighter}
+        onClose={() => setSelectedFighter(null)}
+        canPick={isMyTurn && !!selectedFighter && !!resolveSlot(selectedFighter.weightClass, myUsedSlots)}
+        picking={picking}
+        onPick={handlePick}
+        inQueue={!!selectedFighter && state.queue.some((q) => q.fighterId === selectedFighter.id)}
+        onToggleQueue={toggleQueue}
+        slotNote={selectedFighter ? (() => {
+          const s = resolveSlot(selectedFighter.weightClass, myUsedSlots);
+          if (!s) return `Your ${selectedFighter.weightClass} and Wildcard slots are full.`;
+          if (s === "WILDCARD") return "Would fill your Wildcard slot.";
+          return `Fills your open ${selectedFighter.weightClass} slot.`;
+        })() : null}
+      />
     </div>
   );
 }
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function RoomHeader({ pickLabel }: { pickLabel: string }) {
+function RoomHeader({ pickLabel, live }: { pickLabel: string; live?: boolean }) {
   return (
     <header className="px-4 h-14 flex items-center justify-between flex-shrink-0"
       style={{ background: "var(--ufc-surface)", borderBottom: "1px solid var(--ufc-border)" }}>
       <span className="font-display font-black text-xl uppercase tracking-wide" style={{ color: "var(--ufc-accent)" }}>Draft Room</span>
-      <div className="flex items-center gap-2 text-sm" style={{ color: "var(--ufc-text-2)" }}>{pickLabel}</div>
+      <div className="flex items-center gap-2.5 text-sm" style={{ color: "var(--ufc-text-2)" }}>
+        {live !== undefined && (
+          <span title={live ? "Connected" : "Reconnecting…"} style={{
+            display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700,
+            textTransform: "uppercase", letterSpacing: 0.5, color: live ? "var(--ufc-win)" : "var(--ufc-gold)",
+          }}>
+            <span className={live ? "live-dot" : ""} style={{ width: 6, height: 6, borderRadius: "50%", background: live ? "var(--ufc-win)" : "var(--ufc-gold)", display: "inline-block" }} />
+            {live ? "Live" : "Reconnecting"}
+          </span>
+        )}
+        {pickLabel}
+      </div>
     </header>
+  );
+}
+
+function PowerRanking({ members, rostersByMember, myId, selected, onSelect }: {
+  members: any[]; rostersByMember: Map<string, Map<string, any>>; myId: string;
+  selected: string; onSelect: (id: string) => void;
+}) {
+  const rows = members.map((m: any) => {
+    const id = m.membership.id;
+    const roster = rostersByMember.get(id);
+    let score = 0, count = 0;
+    if (roster) for (const f of roster.values()) { score += f.draftScore ?? 0; count++; }
+    return { id, name: m.membership.teamName ?? m.profile?.displayName ?? "Team", score: Math.round(score * 10) / 10, count };
+  }).sort((a, b) => b.score - a.score);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, color: "var(--ufc-text-3)", marginBottom: 2 }}>Power Ranking · by draft value</div>
+      {rows.map((r, i) => (
+        <button key={r.id} onClick={() => onSelect(r.id)} style={{
+          display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 9, textAlign: "left", cursor: "pointer",
+          background: selected === r.id ? "var(--ufc-accent-wash)" : "var(--ufc-surface)",
+          border: `1px solid ${selected === r.id ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
+        }}>
+          <span className="font-num" style={{ width: 18, fontSize: 12, fontWeight: 800, color: i === 0 ? "var(--ufc-gold)" : "var(--ufc-text-3)" }}>{i + 1}</span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: r.id === myId ? "var(--ufc-accent)" : "var(--ufc-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {r.name}{r.id === myId ? " · You" : ""}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--ufc-text-3)" }}>{r.count} pk</span>
+          <span className="font-num" style={{ fontSize: 14, fontWeight: 800, color: "var(--ufc-text)" }}>{r.score}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -658,17 +792,17 @@ function StatBox({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RosterGrid({ roster }: { roster: Map<string, any> }) {
+function RosterGrid({ roster, onSelect }: { roster: Map<string, any>; onSelect?: (f: any) => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {ROSTER_SLOTS.map((slot) => {
         const f = roster.get(slot);
         return (
-          <div key={slot} style={{
+          <div key={slot} onClick={() => f && onSelect?.(f)} style={{
             display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
             background: f ? "var(--ufc-surface)" : "transparent",
             border: `1px dashed ${f ? "transparent" : "var(--ufc-border-2)"}`,
-            borderRadius: 10, minHeight: 52,
+            borderRadius: 10, minHeight: 52, cursor: f && onSelect ? "pointer" : "default",
             borderStyle: f ? "solid" : "dashed",
           }}>
             <span style={{ width: 54, fontSize: 11, fontWeight: 800, color: "var(--ufc-text-3)", textTransform: "uppercase", flexShrink: 0 }}>{slot}</span>
@@ -693,9 +827,9 @@ function RosterGrid({ roster }: { roster: Map<string, any> }) {
   );
 }
 
-function DraftBoard({ draftOrder, members, picks, currentPickNumber, onClockMembershipId, myId }: {
+function DraftBoard({ draftOrder, members, picks, currentPickNumber, myId }: {
   draftOrder: string[]; members: any[]; picks: any[];
-  currentPickNumber: number; onClockMembershipId: string | null; myId: string;
+  currentPickNumber: number; myId: string;
 }) {
   const teamName = (id: string) => {
     const m = members.find((x: any) => x.membership.id === id);
@@ -706,7 +840,6 @@ function DraftBoard({ draftOrder, members, picks, currentPickNumber, onClockMemb
   for (const p of picks) byNum.set(p.pick.pickNumber, p);
   const rounds = 9;
   const N = draftOrder.length || 1;
-  const curRound = getRound(currentPickNumber, N);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
