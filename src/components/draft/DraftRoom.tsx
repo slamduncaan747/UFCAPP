@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Headshot } from "@/components/shared/Headshot";
 import { DivTag, RankTag } from "@/components/shared/Tags";
 import { SearchIcon, ClockIcon, TrophyIcon, BoltIcon } from "@/components/shared/Icons";
 import { toast } from "sonner";
-import { getMemberForPick } from "@/lib/draft/snake";
+import { getMemberForPick, getRound, resolveSlot } from "@/lib/draft/snake";
 import { useRouter } from "next/navigation";
 import { QueuePanel } from "./QueuePanel";
 
@@ -16,11 +16,16 @@ type DraftState = {
   draft: any;
   picks: any[];
   members: any[];
-  queue: any[];
+  queue: { fighterId: string; priority: number }[];
   availableFighters: any[];
 };
 
 const WEIGHT_CLASSES = ["FLW", "BW", "FW", "LW", "WW", "MW", "LHW", "HW"] as const;
+const ROSTER_SLOTS = [...WEIGHT_CLASSES, "WILDCARD"] as const;
+const TIMER_OPTIONS = [30, 60, 90, 120, 300];
+
+type MainTab = "pick" | "team" | "board" | "rosters" | "queue";
+type SortKey = "score" | "recent" | "record" | "name";
 
 function chipStyle(active: boolean): CSSProperties {
   return {
@@ -33,6 +38,11 @@ function chipStyle(active: boolean): CSSProperties {
   };
 }
 
+function winRate(f: any): number {
+  const t = (f.recordW ?? 0) + (f.recordL ?? 0) + (f.recordD ?? 0);
+  return t > 0 ? (f.recordW ?? 0) / t : 0;
+}
+
 type Props = {
   leagueId: string;
   membershipId: string;
@@ -43,7 +53,7 @@ type Props = {
   autodraftEnabled?: boolean;
 };
 
-export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommissioner, initialDraftStatus, autodraftEnabled: initialAutodraft = false }: Props) {
+export function DraftRoom({ leagueId, membershipId, isCommissioner, initialDraftStatus, autodraftEnabled: initialAutodraft = false }: Props) {
   const router = useRouter();
   const [state, setState] = useState<DraftState | null>(null);
   const [search, setSearch] = useState("");
@@ -51,29 +61,31 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [draftStatus, setDraftStatus] = useState(initialDraftStatus);
   const [starting, setStarting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"fighters" | "queue">("fighters");
+  const [pausing, setPausing] = useState(false);
+  const [activeTab, setActiveTab] = useState<MainTab>("pick");
   const [autodraft, setAutodraft] = useState(initialAutodraft);
   const [autodraftSaving, setAutodraftSaving] = useState(false);
-  const [filterUpcoming, setFilterUpcoming] = useState(false);
   const [divFilter, setDivFilter] = useState<string | null>(null);
-  const [rankedOnly, setRankedOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"score" | "name" | "rank">("score");
+  const [needsOnly, setNeedsOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>("score");
+  const [viewTeamId, setViewTeamId] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef<DraftState | null>(null);
   const tickingRef = useRef(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastBeepRef = useRef<number | null>(null);
-  const supabase = createClient();
+  const prevTurnRef = useRef(false);
+  const supabase = useMemo(() => createClient(), []);
 
-  // Short beep via Web Audio — no asset needed. Used for the final-10s warning.
-  const beep = useCallback(() => {
+  // Short beep via Web Audio — no asset needed.
+  const beep = useCallback((freq = 880) => {
     try {
       const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
       if (!Ctx) return;
       const ctx = audioCtxRef.current ?? (audioCtxRef.current = new Ctx());
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.frequency.value = 880;
+      osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
@@ -83,23 +95,25 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
   }, []);
 
   const loadState = useCallback(async () => {
-    const res = await fetch(`/api/leagues/${leagueId}/draft`);
-    if (!res.ok) {
-      // No draft configured or transient error — render the lobby instead of
-      // hanging on the loading spinner forever.
-      setState((prev) => prev ?? { draft: null, picks: [], members: [], queue: [], availableFighters: [] });
-      return;
-    }
-    const data = await res.json();
-    setState(data);
-    setDraftStatus(data.draft?.status ?? initialDraftStatus);
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/draft`, { cache: "no-store" });
+      if (!res.ok) {
+        setState((prev) => prev ?? { draft: null, picks: [], members: [], queue: [], availableFighters: [] });
+        return;
+      }
+      const data = await res.json();
+      // Normalize queue rows ({queue,fighter}[]) -> {fighterId,priority}[]
+      const queue = (data.queue ?? []).map((q: any) =>
+        q?.queue ? { fighterId: q.queue.fighterId, priority: q.queue.priority } : q
+      );
+      setState({ ...data, queue });
+      if (data.draft?.status) setDraftStatus(data.draft.status);
+    } catch { /* transient — polling/realtime will retry */ }
   }, [leagueId]);
 
-  // Keep a ref of the latest state for the tick interval (avoids stale closures).
   useEffect(() => { stateRef.current = state; }, [state]);
 
-  // Ping the server to advance the draft when the clock expires or the on-clock
-  // member has auto-draft on. Runs on every client; the endpoint is idempotent.
+  // Advance the draft when the clock expires or the on-clock member auto-drafts.
   const triggerTick = useCallback(async () => {
     if (tickingRef.current) return;
     tickingRef.current = true;
@@ -107,7 +121,7 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
       const res = await fetch(`/api/leagues/${leagueId}/draft/tick`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (data?.changed) await loadState();
-    } catch { /* transient — next interval retries */ } finally {
+    } catch { /* transient */ } finally {
       tickingRef.current = false;
     }
   }, [leagueId, loadState]);
@@ -128,18 +142,34 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
     return () => clearInterval(interval);
   }, [draftStatus, triggerTick]);
 
+  // Realtime + resilient reconnection. We never want a dropped socket to freeze
+  // the room, so we also poll on a slow timer and refresh on focus/online.
   useEffect(() => {
     loadState();
     const channel = supabase.channel(`draft:${leagueId}`)
       .on("broadcast", { event: "draft:picked" }, () => loadState())
-      .on("broadcast", { event: "draft:started" }, () => loadState())
-      .on("broadcast", { event: "draft:complete" }, () => {
-        setDraftStatus("completed");
-        loadState();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [leagueId]);
+      .on("broadcast", { event: "draft:started" }, () => { setDraftStatus("in_progress"); loadState(); })
+      .on("broadcast", { event: "draft:paused" }, () => { setDraftStatus("paused"); loadState(); })
+      .on("broadcast", { event: "draft:resumed" }, () => { setDraftStatus("in_progress"); loadState(); })
+      .on("broadcast", { event: "draft:config" }, () => loadState())
+      .on("broadcast", { event: "draft:complete" }, () => { setDraftStatus("completed"); loadState(); })
+      .subscribe((status) => { if (status === "SUBSCRIBED") loadState(); });
+
+    const refresh = () => { if (document.visibilityState === "visible") loadState(); };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    // Safety net poll so the room self-heals even if realtime silently drops.
+    const poll = setInterval(loadState, 7000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      clearInterval(poll);
+    };
+  }, [leagueId, loadState, supabase]);
 
   // Register push subscription on mount
   useEffect(() => {
@@ -150,27 +180,24 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
         const { vapidPublicKey } = await res.json();
         if (!vapidPublicKey) return;
         const reg = await navigator.serviceWorker.ready;
-        const existing = await reg.pushManager.getSubscription();
-        if (existing) return;
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return;
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: vapidPublicKey,
-        });
+        if (await reg.pushManager.getSubscription()) return;
+        if ((await Notification.requestPermission()) !== "granted") return;
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidPublicKey });
         await fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sub.toJSON()),
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()),
         });
-      } catch { /* silent — push is optional */ }
+      } catch { /* push is optional */ }
     }
     registerPush();
   }, []);
 
   // Clock countdown + final-10s warning beep (only when it's your pick).
   useEffect(() => {
-    if (!state?.draft?.clockExpiresAt) { setTimeLeft(null); lastBeepRef.current = null; return; }
+    if (!state?.draft?.clockExpiresAt || draftStatus !== "in_progress") {
+      setTimeLeft(null); lastBeepRef.current = null;
+      if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
     if (timerRef.current) clearInterval(timerRef.current);
     const order = (state.draft.draftOrder ?? []) as string[];
     const myTurn = order.length > 0 && getMemberForPick(state.draft.currentPickNumber, order) === membershipId;
@@ -185,14 +212,57 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
     tick();
     timerRef.current = setInterval(tick, 500);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [state?.draft?.clockExpiresAt, state?.draft?.currentPickNumber, membershipId, beep]);
+  }, [state?.draft?.clockExpiresAt, state?.draft?.currentPickNumber, draftStatus, membershipId, beep]);
+
+  // ── Derived draft data ──────────────────────────────────────────────────
+  const draft = state?.draft;
+  const draftOrder = (draft?.draftOrder ?? []) as string[];
+  const currentPickNumber = draft?.currentPickNumber ?? 0;
+  const onClockMembershipId = draftOrder.length > 0 ? getMemberForPick(currentPickNumber, draftOrder) : null;
+  const isMyTurn = onClockMembershipId === membershipId && draftStatus === "in_progress";
+
+  // Buzz the device + screen when it becomes your turn.
+  useEffect(() => {
+    if (isMyTurn && !prevTurnRef.current) {
+      try { navigator.vibrate?.([180, 90, 180]); } catch { /* unsupported */ }
+      beep(660); setTimeout(() => beep(880), 180);
+      toast.success("You're on the clock — make your pick!");
+    }
+    prevTurnRef.current = isMyTurn;
+  }, [isMyTurn, beep]);
+
+  // Per-membership roster (slot -> {fighter}) built from picks.
+  const rostersByMember = useMemo(() => {
+    const map = new Map<string, Map<string, any>>();
+    for (const p of state?.picks ?? []) {
+      if (!p.pick.fighterId || !p.pick.slot) continue;
+      if (!map.has(p.pick.membershipId)) map.set(p.pick.membershipId, new Map());
+      map.get(p.pick.membershipId)!.set(p.pick.slot, p.fighter);
+    }
+    return map;
+  }, [state?.picks]);
+
+  const myRoster = rostersByMember.get(membershipId) ?? new Map<string, any>();
+  const myUsedSlots = useMemo(() => new Set(myRoster.keys()), [myRoster]);
+  const myMissingSlots = ROSTER_SLOTS.filter((s) => !myUsedSlots.has(s));
+
+  if (!state) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--ufc-bg)" }}>
+        <div style={{ color: "var(--ufc-text-3)" }}>Loading draft room…</div>
+      </div>
+    );
+  }
+
+  const { picks, members, availableFighters } = state;
+  const totalPicks = draftOrder.length * 9;
+  const onClockMember = members.find((m: any) => m.membership.id === onClockMembershipId);
 
   async function handlePick(fighterId: string) {
     setPicking(true);
     try {
       const res = await fetch(`/api/leagues/${leagueId}/draft/pick`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fighterId }),
       });
       const data = await res.json();
@@ -219,13 +289,37 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
     setStarting(false);
   }
 
+  async function handleTogglePause() {
+    setPausing(true);
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/draft/pause`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setDraftStatus(data.status);
+      toast.success(data.status === "paused" ? "Draft paused" : "Draft resumed");
+      await loadState();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPausing(false);
+    }
+  }
+
+  async function handleSetTimer(secs: number) {
+    const res = await fetch(`/api/leagues/${leagueId}/draft/config`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pickTimerSeconds: secs }),
+    });
+    if (res.ok) await loadState();
+    else toast.error("Couldn't update timer");
+  }
+
   async function handleAutodraftToggle() {
     setAutodraftSaving(true);
     const newVal = !autodraft;
     try {
       const res = await fetch(`/api/leagues/${leagueId}/draft/autodraft`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: newVal }),
       });
       if (!res.ok) throw new Error("Failed to update");
@@ -238,52 +332,11 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
     }
   }
 
-  if (!state) {
+  // ── Pre-draft lobby ──────────────────────────────────────────────────────
+  if (draftStatus === "scheduled") {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--ufc-bg)" }}>
-        <div style={{ color: "var(--ufc-text-3)" }}>Loading draft room…</div>
-      </div>
-    );
-  }
-
-  const { draft, picks, members, availableFighters } = state;
-  const draftOrder = (draft?.draftOrder ?? []) as string[];
-  const currentPickNumber = draft?.currentPickNumber ?? 0;
-  const onClockMembershipId = draftOrder.length > 0 ? getMemberForPick(currentPickNumber, draftOrder) : null;
-  const isMyTurn = onClockMembershipId === membershipId;
-  const totalPicks = draftOrder.length * 9;
-
-  let filtered = availableFighters.filter((f: any) =>
-    f.name.toLowerCase().includes(search.toLowerCase())
-  );
-  if (divFilter) filtered = filtered.filter((f: any) => f.weightClass === divFilter);
-  if (rankedOnly) filtered = filtered.filter((f: any) => f.isChampion || f.currentRanking != null);
-  if (filterUpcoming) filtered = filtered.filter((f: any) => f.hasUpcomingBout);
-
-  const rankKey = (f: any) => (f.isChampion ? 0 : f.currentRanking != null ? f.currentRanking : 999);
-  filtered = [...filtered].sort((a: any, b: any) => {
-    if (sortBy === "name") return a.name.localeCompare(b.name);
-    if (sortBy === "rank") return rankKey(a) - rankKey(b) || (b.draftScore ?? 0) - (a.draftScore ?? 0);
-    return (b.draftScore ?? 0) - (a.draftScore ?? 0); // score
-  });
-
-  const onClockMember = members.find((m: any) => m.membership.id === onClockMembershipId);
-
-  return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--ufc-bg)" }}>
-      {/* Header */}
-      <header className="px-4 h-14 flex items-center justify-between flex-shrink-0"
-        style={{ background: "var(--ufc-surface)", borderBottom: "1px solid var(--ufc-border)" }}>
-        <span className="font-display font-black text-xl uppercase tracking-wide" style={{ color: "var(--ufc-accent)" }}>
-          Draft Room
-        </span>
-        <div className="flex items-center gap-2 text-sm" style={{ color: "var(--ufc-text-2)" }}>
-          Pick {Math.min(currentPickNumber + 1, totalPicks)}/{totalPicks}
-        </div>
-      </header>
-
-      {/* Pre-draft: not started */}
-      {draftStatus === "scheduled" && (
+      <div className="min-h-screen flex flex-col" style={{ background: "var(--ufc-bg)" }}>
+        <RoomHeader pickLabel={`${members.length} ready`} />
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center max-w-sm w-full">
             <TrophyIcon size={48} style={{ color: "var(--ufc-accent)", margin: "0 auto 16px" }} />
@@ -293,34 +346,37 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
               {isCommissioner ? " When everyone's in, start the snake draft." : " Waiting for the commissioner to start."}
             </p>
 
-            {/* Member list so the lobby isn't a dead end */}
-            <div className="ufc-surface rounded-xl p-3 mb-6 text-left">
-              <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ufc-text-3)" }}>
-                In the Room
-              </div>
-              {members.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--ufc-text-3)" }}>No members yet.</p>
-              )}
+            <div className="ufc-surface rounded-xl p-3 mb-4 text-left">
+              <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ufc-text-3)" }}>In the Room</div>
+              {members.length === 0 && <p className="text-xs" style={{ color: "var(--ufc-text-3)" }}>No members yet.</p>}
               <div className="space-y-1.5">
                 {members.map((m: any) => (
                   <div key={m.membership.id} className="flex items-center gap-2 text-sm">
-                    <span style={{
-                      width: 7, height: 7, borderRadius: "50%",
-                      background: "var(--ufc-accent)", flexShrink: 0,
-                    }} />
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--ufc-accent)", flexShrink: 0 }} />
                     <span className="truncate font-bold" style={{ color: "var(--ufc-text)" }}>
                       {m.membership.teamName ?? m.profile?.displayName ?? "Team"}
                     </span>
-                    {m.membership.id === membershipId && (
-                      <span style={{ fontSize: 10, color: "var(--ufc-accent)", fontWeight: 700 }}>YOU</span>
-                    )}
-                    {m.membership.role === "commissioner" && (
-                      <span style={{ fontSize: 10, color: "var(--ufc-text-3)", fontWeight: 700 }}>COMMISH</span>
-                    )}
+                    {m.membership.id === membershipId && <span style={{ fontSize: 10, color: "var(--ufc-accent)", fontWeight: 700 }}>YOU</span>}
+                    {m.membership.role === "commissioner" && <span style={{ fontSize: 10, color: "var(--ufc-text-3)", fontWeight: 700 }}>COMMISH</span>}
                   </div>
                 ))}
               </div>
             </div>
+
+            {isCommissioner && draft && (
+              <div className="ufc-surface rounded-xl p-3 mb-5 text-left">
+                <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ufc-text-3)" }}>
+                  Pick Timer · {draft.pickTimerSeconds}s
+                </div>
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                  {TIMER_OPTIONS.map((s) => (
+                    <button key={s} onClick={() => handleSetTimer(s)} style={chipStyle(draft.pickTimerSeconds === s)}>
+                      {s >= 60 ? `${s / 60}m` : `${s}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {isCommissioner ? (
               <Button onClick={handleStartDraft} disabled={starting || !draft || members.length < 2}
@@ -329,168 +385,174 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
                 {starting ? "Starting…" : !draft ? "Draft Not Configured" : members.length < 2 ? "Need 2+ Members" : "Start Draft"}
               </Button>
             ) : (
-              <div className="text-sm" style={{ color: "var(--ufc-text-3)" }}>
-                ⏳ Hang tight — the draft will begin shortly.
-              </div>
+              <div className="text-sm" style={{ color: "var(--ufc-text-3)" }}>⏳ Hang tight — the draft will begin shortly.</div>
             )}
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Draft complete */}
-      {draftStatus === "completed" && (
+  // ── Draft complete ───────────────────────────────────────────────────────
+  if (draftStatus === "completed") {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: "var(--ufc-bg)" }}>
+        <RoomHeader pickLabel="Final" />
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center max-w-sm">
             <div className="text-5xl mb-4">🏆</div>
             <h2 className="font-display font-bold text-2xl uppercase mb-2">Draft Complete!</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--ufc-text-2)" }}>
-              Rosters have been populated. Let the season begin.
-            </p>
+            <p className="text-sm mb-6" style={{ color: "var(--ufc-text-2)" }}>Rosters have been populated. Let the season begin.</p>
             <Button onClick={() => router.push(`/leagues/${leagueId}?tab=team`)}
               style={{ background: "var(--ufc-accent)", color: "var(--ufc-accent-ink)" }}
-              className="font-display font-bold uppercase tracking-wider">
-              View My Team
-            </Button>
+              className="font-display font-bold uppercase tracking-wider">View My Team</Button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Active / paused draft ────────────────────────────────────────────────
+  const isPaused = draftStatus === "paused";
+
+  // Available fighters: filter + sort (all backed by real data now).
+  let filtered = availableFighters.filter((f: any) => f.name.toLowerCase().includes(search.toLowerCase()));
+  if (divFilter) filtered = filtered.filter((f: any) => f.weightClass === divFilter);
+  if (needsOnly) filtered = filtered.filter((f: any) => !myUsedSlots.has(f.weightClass));
+
+  filtered = [...filtered].sort((a: any, b: any) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    if (sortBy === "record") return winRate(b) - winRate(a) || (b.draftScore ?? 0) - (a.draftScore ?? 0);
+    if (sortBy === "recent") {
+      const da = a.daysSinceLastFight ?? 99999, dbb = b.daysSinceLastFight ?? 99999;
+      return da - dbb || (b.draftScore ?? 0) - (a.draftScore ?? 0);
+    }
+    return (b.draftScore ?? 0) - (a.draftScore ?? 0); // score
+  });
+
+  const TABS: { key: MainTab; label: string }[] = [
+    { key: "pick", label: "Pick" },
+    { key: "team", label: `My Team ${9 - myMissingSlots.length}/9` },
+    { key: "board", label: "Board" },
+    { key: "rosters", label: "Rosters" },
+    { key: "queue", label: `Queue ${state.queue.length}` },
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--ufc-bg)" }}>
+      <RoomHeader pickLabel={`Pick ${Math.min(currentPickNumber + 1, totalPicks)}/${totalPicks}`} />
+
+      {/* Paused overlay banner */}
+      {isPaused && (
+        <div className="px-4 py-2 flex items-center justify-between" style={{ background: "var(--ufc-accent-wash)", borderBottom: "1px solid var(--ufc-accent)" }}>
+          <span className="font-display font-bold uppercase text-sm" style={{ color: "var(--ufc-accent)" }}>⏸ Draft Paused</span>
+          {isCommissioner && (
+            <Button size="sm" onClick={handleTogglePause} disabled={pausing}
+              style={{ background: "var(--ufc-accent)", color: "var(--ufc-accent-ink)" }}
+              className="font-display font-bold uppercase text-xs">Resume</Button>
+          )}
         </div>
       )}
 
-      {/* Active draft */}
-      {draftStatus === "in_progress" && (
-        <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4 py-4 gap-4 overflow-hidden">
-          {/* On-clock banner */}
-          <div className={`rounded-xl p-3 flex items-center justify-between ${isMyTurn ? "card-glow" : ""} ${isMyTurn && timeLeft !== null && timeLeft <= 10 ? "clock-warn" : ""}`}
-            style={{
-              background: isMyTurn ? "var(--ufc-accent-wash)" : "var(--ufc-surface)",
-              border: `1px solid ${isMyTurn ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
-            }}>
-            <div>
-              <div className="text-xs uppercase tracking-widest mb-0.5" style={{ color: "var(--ufc-text-3)" }}>On the Clock</div>
-              <div className="font-display font-bold uppercase text-sm">
-                {isMyTurn ? "YOUR PICK" : (onClockMember?.membership.teamName ?? "—")}
-              </div>
-              {isMyTurn && autodraft && (
-                <div style={{ fontSize: 11, color: "var(--ufc-accent)", marginTop: 2 }}>Auto-draft will pick for you</div>
-              )}
+      <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4 py-4 gap-3 overflow-hidden">
+        {/* On-clock banner */}
+        <div className={`rounded-xl p-3 flex items-center justify-between ${isMyTurn ? "card-glow turn-buzz" : ""} ${isMyTurn && timeLeft !== null && timeLeft <= 10 ? "clock-warn" : ""}`}
+          style={{
+            background: isMyTurn ? "var(--ufc-accent-wash)" : "var(--ufc-surface)",
+            border: `1px solid ${isMyTurn ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
+          }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="text-xs uppercase tracking-widest mb-0.5" style={{ color: "var(--ufc-text-3)" }}>On the Clock</div>
+            <div className="font-display font-bold uppercase text-sm truncate">
+              {isMyTurn ? "YOUR PICK" : (onClockMember?.membership.teamName ?? "—")}
             </div>
-            <div className="flex items-center gap-3">
-              {timeLeft !== null && (
-                <div className="flex items-center gap-1.5">
-                  <ClockIcon size={14} style={{ color: timeLeft <= 10 ? "var(--ufc-live)" : "var(--ufc-text-2)" }} />
-                  <span className="font-num text-xl font-bold"
-                    style={{ color: timeLeft <= 10 ? "var(--ufc-live)" : "var(--ufc-text)" }}>
-                    {timeLeft}s
-                  </span>
-                </div>
-              )}
-              {/* Auto-draft toggle */}
-              <button
-                onClick={handleAutodraftToggle}
-                disabled={autodraftSaving}
-                title={autodraft ? "Disable auto-draft" : "Enable auto-draft"}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  padding: "5px 10px", borderRadius: 8,
-                  background: autodraft ? "var(--ufc-accent)" : "var(--ufc-surface-3)",
-                  border: `1px solid ${autodraft ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
-                  color: autodraft ? "#fff" : "var(--ufc-text-2)",
-                  cursor: "pointer", fontSize: 11, fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: 0.5, flexShrink: 0,
-                }}
-              >
-                <BoltIcon size={12} />
-                {autodraft ? "Auto" : "Auto"}
-              </button>
-            </div>
+            {isMyTurn && autodraft && <div style={{ fontSize: 11, color: "var(--ufc-accent)", marginTop: 2 }}>Auto-draft will pick for you</div>}
           </div>
-
-          {/* Pick board — recent picks */}
-          <div className="ufc-surface rounded-xl p-3 max-h-40 overflow-y-auto">
-            <div className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ufc-text-3)" }}>
-              Recent Picks
-            </div>
-            {picks.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--ufc-text-3)" }}>No picks yet</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {timeLeft !== null && !isPaused && (
+              <div className="flex items-center gap-1.5">
+                <ClockIcon size={14} style={{ color: timeLeft <= 10 ? "var(--ufc-live)" : "var(--ufc-text-2)" }} />
+                <span className="font-num text-xl font-bold" style={{ color: timeLeft <= 10 ? "var(--ufc-live)" : "var(--ufc-text)" }}>{timeLeft}s</span>
+              </div>
             )}
-            <div className="space-y-1.5">
-              {[...picks].reverse().slice(0, 10).map(({ pick, fighter, membership: m }) => (
-                <div key={pick.id} className="flex items-center gap-2 text-xs">
-                  <span className="font-num w-6 text-right flex-shrink-0" style={{ color: "var(--ufc-text-3)" }}>
-                    #{pick.pickNumber + 1}
-                  </span>
-                  {fighter && <Headshot name={fighter.name} photoUrl={fighter.photoUrl} weightClass={fighter.weightClass} size={20} />}
-                  <span className="truncate font-bold" style={{ color: "var(--ufc-text)" }}>{fighter?.name ?? "—"}</span>
-                  {pick.isAutopick && <span style={{ fontSize: 9, color: "var(--ufc-accent)", fontWeight: 700, flexShrink: 0 }}>AUTO</span>}
-                  <span className="truncate flex-shrink-0" style={{ color: "var(--ufc-text-3)" }}>{m.teamName}</span>
-                </div>
+            {isCommissioner && (
+              <button onClick={handleTogglePause} disabled={pausing} title={isPaused ? "Resume draft" : "Pause draft"}
+                style={{ padding: "5px 9px", borderRadius: 8, background: "var(--ufc-surface-3)", border: "1px solid var(--ufc-border)", color: "var(--ufc-text-2)", cursor: "pointer", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                {isPaused ? "▶" : "⏸"}
+              </button>
+            )}
+            <button onClick={handleAutodraftToggle} disabled={autodraftSaving} title={autodraft ? "Disable auto-draft" : "Enable auto-draft"}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8,
+                background: autodraft ? "var(--ufc-accent)" : "var(--ufc-surface-3)",
+                border: `1px solid ${autodraft ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
+                color: autodraft ? "#fff" : "var(--ufc-text-2)", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0,
+              }}>
+              <BoltIcon size={12} /> Auto
+            </button>
+          </div>
+        </div>
+
+        {/* Tab bar */}
+        <div style={{ display: "flex", gap: 4, overflowX: "auto", flexShrink: 0, paddingBottom: 2 }}>
+          {TABS.map((t) => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
+              flex: "1 0 auto", padding: "8px 12px", borderRadius: 9, cursor: "pointer",
+              background: activeTab === t.key ? "var(--ufc-accent)" : "var(--ufc-surface)",
+              border: `1px solid ${activeTab === t.key ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
+              color: activeTab === t.key ? "#fff" : "var(--ufc-text-2)",
+              fontWeight: 700, fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.5, whiteSpace: "nowrap",
+            }}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* ── PICK TAB ── */}
+        {activeTab === "pick" && (
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* Roster-need strip */}
+            {myMissingSlots.length > 0 && (
+              <div style={{ display: "flex", gap: 5, alignItems: "center", marginBottom: 8, flexShrink: 0, overflowX: "auto" }}>
+                <span style={{ fontSize: 10, color: "var(--ufc-text-3)", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, flexShrink: 0 }}>Need</span>
+                {myMissingSlots.map((s) => (
+                  <button key={s} onClick={() => { setDivFilter(s === "WILDCARD" ? null : s); setNeedsOnly(s !== "WILDCARD"); }}
+                    style={{ ...chipStyle(divFilter === s), height: 26, fontSize: 10 }}>{s}</button>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 6, marginBottom: 8, flexShrink: 0 }}>
+              <div className="relative flex-1">
+                <SearchIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--ufc-text-3)" }} />
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search fighters…"
+                  className="pl-9" style={{ background: "var(--ufc-surface-3)", border: "1px solid var(--ufc-border-2)", color: "var(--ufc-text)" }} />
+              </div>
+              <button onClick={() => setNeedsOnly(!needsOnly)} style={chipStyle(needsOnly)} title="Only fighters that fill an open slot">Fills Need</button>
+            </div>
+
+            <div style={{ display: "flex", gap: 5, marginBottom: 8, overflowX: "auto", flexShrink: 0, paddingBottom: 2 }}>
+              <button onClick={() => setDivFilter(null)} style={chipStyle(divFilter === null)}>All</button>
+              {WEIGHT_CLASSES.map((wc) => (
+                <button key={wc} onClick={() => setDivFilter(divFilter === wc ? null : wc)} style={chipStyle(divFilter === wc)}>{wc}</button>
               ))}
             </div>
-          </div>
 
-          {/* Tab toggle: Fighters / My Queue */}
-          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            {(["fighters", "queue"] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{
-                flex: 1, padding: "8px 0", borderRadius: 9, cursor: "pointer",
-                background: activeTab === tab ? "var(--ufc-accent)" : "var(--ufc-surface)",
-                border: `1px solid ${activeTab === tab ? "var(--ufc-accent)" : "var(--ufc-border)"}`,
-                color: activeTab === tab ? "#fff" : "var(--ufc-text-2)",
-                fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5,
-              }}>
-                {tab === "fighters" ? "Available" : `My Queue (${state.queue.length})`}
-              </button>
-            ))}
-          </div>
+            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexShrink: 0, overflowX: "auto", paddingBottom: 2 }}>
+              <span style={{ fontSize: 10, color: "var(--ufc-text-3)", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, flexShrink: 0 }}>Sort</span>
+              {([["score", "★ Score"], ["recent", "⏱ Recent"], ["record", "✓ Record"], ["name", "A–Z"]] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setSortBy(key)} style={chipStyle(sortBy === key)}>{label}</button>
+              ))}
+            </div>
 
-          {/* Fighters panel */}
-          {activeTab === "fighters" && (
-            <div className="flex-1 flex flex-col min-h-0">
-              <div style={{ display: "flex", gap: 6, marginBottom: 8, flexShrink: 0 }}>
-                <div className="relative flex-1">
-                  <SearchIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--ufc-text-3)" }} />
-                  <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search fighters…"
-                    className="pl-9" style={{ background: "var(--ufc-surface-3)", border: "1px solid var(--ufc-border-2)", color: "var(--ufc-text)" }} />
-                </div>
-                <button
-                  onClick={() => setRankedOnly(!rankedOnly)}
-                  style={chipStyle(rankedOnly)}
-                  title="Show only ranked fighters & champions"
-                >
-                  ★ Ranked
-                </button>
-                <button
-                  onClick={() => setFilterUpcoming(!filterUpcoming)}
-                  style={chipStyle(filterUpcoming)}
-                  title="Show only fighters with upcoming bouts"
-                >
-                  ⚡ Soon
-                </button>
-              </div>
-              {/* Weight-class filter chips */}
-              <div style={{ display: "flex", gap: 5, marginBottom: 8, overflowX: "auto", flexShrink: 0, paddingBottom: 2 }}>
-                <button onClick={() => setDivFilter(null)} style={chipStyle(divFilter === null)}>All</button>
-                {WEIGHT_CLASSES.map((wc) => (
-                  <button key={wc} onClick={() => setDivFilter(divFilter === wc ? null : wc)} style={chipStyle(divFilter === wc)}>
-                    {wc}
-                  </button>
-                ))}
-              </div>
-              {/* Sort control */}
-              <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexShrink: 0 }}>
-                <span style={{ fontSize: 10, color: "var(--ufc-text-3)", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>Sort</span>
-                {([["score", "★ Score"], ["rank", "# Rank"], ["name", "A–Z"]] as const).map(([key, label]) => (
-                  <button key={key} onClick={() => setSortBy(key)} style={chipStyle(sortBy === key)}>{label}</button>
-                ))}
-              </div>
-              {filtered.length === 0 && (
-                <p style={{ fontSize: 12, color: "var(--ufc-text-3)", padding: "12px 2px" }}>
-                  No fighters match these filters.
-                </p>
-              )}
-              <div className="flex-1 overflow-y-auto space-y-1.5">
-                {filtered.map((f: any) => (
+            {filtered.length === 0 && <p style={{ fontSize: 12, color: "var(--ufc-text-3)", padding: "12px 2px" }}>No fighters match these filters.</p>}
+
+            <div className="flex-1 overflow-y-auto space-y-1.5">
+              {filtered.slice(0, 150).map((f: any) => {
+                const slot = resolveSlot(f.weightClass, myUsedSlots);
+                const fillsNeed = slot === f.weightClass;
+                return (
                   <div key={f.id} className="flex items-center gap-3 p-3 rounded-xl"
-                    style={{ background: "var(--ufc-surface)", border: "1px solid var(--ufc-border)" }}>
+                    style={{ background: "var(--ufc-surface)", border: `1px solid ${fillsNeed && isMyTurn ? "var(--ufc-accent)" : "var(--ufc-border)"}` }}>
                     <Headshot name={f.name} photoUrl={f.photoUrl} weightClass={f.weightClass} size={38} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -498,47 +560,203 @@ export function DraftRoom({ leagueId, membershipId, userId, displayName, isCommi
                         {f.isChampion && <RankTag isChamp />}
                         {!f.isChampion && f.currentRanking && <RankTag rank={f.currentRanking} />}
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                         <DivTag slot={f.weightClass} short />
-                        {f.hasUpcomingBout && (
-                          <span style={{ fontSize: 10, color: "var(--ufc-accent)", fontWeight: 600 }}>⚡ Upcoming</span>
+                        <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>{f.recordW}-{f.recordL}{f.recordD ? `-${f.recordD}` : ""}</span>
+                        {f.draftScore != null && <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>★ {f.draftScore}</span>}
+                        {f.daysSinceLastFight != null && (
+                          <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>⏱ {fmtDays(f.daysSinceLastFight)}</span>
                         )}
-                        {f.draftScore != null && (
-                          <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>★ {f.draftScore}</span>
-                        )}
+                        {!slot && <span style={{ fontSize: 10, color: "var(--ufc-live)", fontWeight: 700 }}>Slot full</span>}
+                        {slot === "WILDCARD" && <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>→ WC</span>}
                       </div>
                     </div>
-                    <Button size="sm" onClick={() => handlePick(f.id)}
-                      disabled={!isMyTurn || picking}
+                    <Button size="sm" onClick={() => handlePick(f.id)} disabled={!isMyTurn || picking || !slot}
                       style={{
-                        background: isMyTurn ? "var(--ufc-accent)" : "var(--ufc-surface-3)",
-                        color: isMyTurn ? "var(--ufc-accent-ink)" : "var(--ufc-text-3)",
+                        background: isMyTurn && slot ? "var(--ufc-accent)" : "var(--ufc-surface-3)",
+                        color: isMyTurn && slot ? "var(--ufc-accent-ink)" : "var(--ufc-text-3)",
                       }}
-                      className="font-display font-bold uppercase text-xs flex-shrink-0">
-                      {picking ? "…" : "Pick"}
-                    </Button>
+                      className="font-display font-bold uppercase text-xs flex-shrink-0">{picking ? "…" : "Pick"}</Button>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Queue panel */}
-          {activeTab === "queue" && (
-            <div className="flex-1 overflow-y-auto">
-              <p style={{ fontSize: 12, color: "var(--ufc-text-3)", marginBottom: 10 }}>
-                Build your priority queue. If you&apos;re AFK or auto-draft is on, we&apos;ll pick the first available fighter here.
-              </p>
-              <QueuePanel
-                leagueId={leagueId}
-                queue={state.queue}
-                fighters={availableFighters}
-                onQueueChange={(q) => setState(prev => prev ? { ...prev, queue: q } : prev)}
-              />
+        {/* ── MY TEAM TAB ── */}
+        {activeTab === "team" && (
+          <div className="flex-1 overflow-y-auto">
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <StatBox label="Drafted" value={`${9 - myMissingSlots.length}/9`} />
+              <StatBox label="Open Slots" value={`${myMissingSlots.length}`} />
             </div>
-          )}
-        </div>
-      )}
+            <RosterGrid roster={myRoster} />
+          </div>
+        )}
+
+        {/* ── BOARD TAB ── */}
+        {activeTab === "board" && (
+          <div className="flex-1 overflow-auto">
+            <DraftBoard draftOrder={draftOrder} members={members} picks={picks}
+              currentPickNumber={currentPickNumber} onClockMembershipId={onClockMembershipId} myId={membershipId} />
+          </div>
+        )}
+
+        {/* ── ROSTERS TAB ── */}
+        {activeTab === "rosters" && (
+          <div className="flex-1 overflow-y-auto">
+            <div style={{ display: "flex", gap: 5, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+              {members.map((m: any) => {
+                const id = m.membership.id;
+                const active = (viewTeamId ?? membershipId) === id;
+                return (
+                  <button key={id} onClick={() => setViewTeamId(id)} style={{ ...chipStyle(active), height: 30 }}>
+                    {m.membership.teamName ?? m.profile?.displayName ?? "Team"}
+                    {id === membershipId ? " (You)" : ""}
+                  </button>
+                );
+              })}
+            </div>
+            <RosterGrid roster={rostersByMember.get(viewTeamId ?? membershipId) ?? new Map()} />
+          </div>
+        )}
+
+        {/* ── QUEUE TAB ── */}
+        {activeTab === "queue" && (
+          <div className="flex-1 overflow-y-auto">
+            <p style={{ fontSize: 12, color: "var(--ufc-text-3)", marginBottom: 10 }}>
+              Build your priority queue. If you&apos;re AFK or auto-draft is on, we&apos;ll pick the first available fighter here.
+            </p>
+            <QueuePanel leagueId={leagueId} queue={state.queue} fighters={availableFighters}
+              onQueueChange={(q) => setState((prev) => prev ? { ...prev, queue: q } : prev)} />
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+// ── Sub-components ──────────────────────────────────────────────────────────
+
+function RoomHeader({ pickLabel }: { pickLabel: string }) {
+  return (
+    <header className="px-4 h-14 flex items-center justify-between flex-shrink-0"
+      style={{ background: "var(--ufc-surface)", borderBottom: "1px solid var(--ufc-border)" }}>
+      <span className="font-display font-black text-xl uppercase tracking-wide" style={{ color: "var(--ufc-accent)" }}>Draft Room</span>
+      <div className="flex items-center gap-2 text-sm" style={{ color: "var(--ufc-text-2)" }}>{pickLabel}</div>
+    </header>
+  );
+}
+
+function StatBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ flex: 1, background: "var(--ufc-surface)", border: "1px solid var(--ufc-border)", borderRadius: 12, padding: "10px 12px" }}>
+      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--ufc-text-3)", fontWeight: 700 }}>{label}</div>
+      <div className="font-num" style={{ fontSize: 22, fontWeight: 800, color: "var(--ufc-text)" }}>{value}</div>
+    </div>
+  );
+}
+
+function RosterGrid({ roster }: { roster: Map<string, any> }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {ROSTER_SLOTS.map((slot) => {
+        const f = roster.get(slot);
+        return (
+          <div key={slot} style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
+            background: f ? "var(--ufc-surface)" : "transparent",
+            border: `1px dashed ${f ? "transparent" : "var(--ufc-border-2)"}`,
+            borderRadius: 10, minHeight: 52,
+            borderStyle: f ? "solid" : "dashed",
+          }}>
+            <span style={{ width: 54, fontSize: 11, fontWeight: 800, color: "var(--ufc-text-3)", textTransform: "uppercase", flexShrink: 0 }}>{slot}</span>
+            {f ? (
+              <>
+                <Headshot name={f.name} photoUrl={f.photoUrl} weightClass={f.weightClass} size={32} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ufc-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <DivTag slot={f.weightClass} short />
+                    {f.draftScore != null && <span style={{ fontSize: 10, color: "var(--ufc-text-3)" }}>★ {f.draftScore}</span>}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--ufc-text-3)", fontStyle: "italic" }}>Open — needs a fighter</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DraftBoard({ draftOrder, members, picks, currentPickNumber, onClockMembershipId, myId }: {
+  draftOrder: string[]; members: any[]; picks: any[];
+  currentPickNumber: number; onClockMembershipId: string | null; myId: string;
+}) {
+  const teamName = (id: string) => {
+    const m = members.find((x: any) => x.membership.id === id);
+    return m?.membership.teamName ?? m?.profile?.displayName ?? "Team";
+  };
+  // pickNumber -> {fighter, isAutopick}
+  const byNum = new Map<number, any>();
+  for (const p of picks) byNum.set(p.pick.pickNumber, p);
+  const rounds = 9;
+  const N = draftOrder.length || 1;
+  const curRound = getRound(currentPickNumber, N);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {Array.from({ length: rounds }, (_, r) => {
+        const roundNum = r + 1;
+        // Snake: even round index (0-based) keeps order, odd reverses.
+        const seq = r % 2 === 0 ? draftOrder : [...draftOrder].slice().reverse();
+        return (
+          <div key={r}>
+            <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, color: "var(--ufc-text-3)", marginBottom: 5 }}>
+              Round {roundNum}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {seq.map((mid, i) => {
+                const pickNum = r * N + i;
+                const entry = byNum.get(pickNum);
+                const isCurrent = pickNum === currentPickNumber;
+                const mine = mid === myId;
+                return (
+                  <div key={mid} style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8,
+                    background: isCurrent ? "var(--ufc-accent-wash)" : "var(--ufc-surface)",
+                    border: `1px solid ${isCurrent ? "var(--ufc-accent)" : mine ? "var(--ufc-border-2)" : "var(--ufc-border)"}`,
+                  }}>
+                    <span className="font-num" style={{ width: 28, fontSize: 11, color: "var(--ufc-text-3)", flexShrink: 0 }}>{pickNum + 1}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: mine ? "var(--ufc-accent)" : "var(--ufc-text-2)", width: 84, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {teamName(mid)}{mine ? " ·You" : ""}
+                    </span>
+                    {entry?.fighter ? (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ufc-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {entry.fighter.name}{entry.pick.isAutopick ? " ·AUTO" : ""}
+                      </span>
+                    ) : isCurrent ? (
+                      <span style={{ fontSize: 11, color: "var(--ufc-accent)", fontWeight: 700 }}>● On the clock</span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: "var(--ufc-text-3)" }}>—</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function fmtDays(d: number): string {
+  if (d < 60) return `${d}d`;
+  if (d < 365) return `${Math.round(d / 30)}mo`;
+  return `${(d / 365).toFixed(1)}y`;
 }

@@ -16,7 +16,8 @@ export function DraftBanner({ leagueId, leagueStatus, draftStatus, currentPickNu
   const showDraft = leagueStatus === "setup" || leagueStatus === "drafting";
   if (!showDraft) return null;
 
-  const isLive = draftStatus === "in_progress";
+  const isLive = draftStatus === "in_progress" || draftStatus === "paused";
+  const isPaused = draftStatus === "paused";
   const pickDisplay = isLive && totalPicks ? `Pick ${(currentPickNumber ?? 0) + 1}/${totalPicks}` : null;
 
   return (
@@ -63,7 +64,7 @@ export function DraftBanner({ leagueId, leagueStatus, draftStatus, currentPickNu
         </div>
         <p style={{ fontSize: 13, color: "var(--ufc-text-2, #9ca3af)", margin: 0 }}>
           {isLive
-            ? "Draft in progress — head in to make your picks."
+            ? isPaused ? "Draft paused — tap to head back in." : "Draft in progress — head in to make your picks."
             : isCommissioner
               ? "All members joined? Start the snake draft."
               : "Waiting for the commissioner to start the draft."}

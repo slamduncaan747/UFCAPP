@@ -287,6 +287,17 @@ body::before {
 }
 .clock-warn { animation: clock-warn 1s ease-in-out infinite; border-color: var(--ufc-live, #ff3b4e) !important; }
 
+/* It's your pick — a brief attention-grabbing buzz on the on-clock banner */
+@keyframes turn-buzz {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-3px); }
+  30% { transform: translateX(3px); }
+  45% { transform: translateX(-2px); }
+  60% { transform: translateX(2px); }
+  75% { transform: translateX(-1px); }
+}
+.turn-buzz { animation: turn-buzz 0.5s ease-in-out 2; }
+
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar          { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track    { background: transparent; }
