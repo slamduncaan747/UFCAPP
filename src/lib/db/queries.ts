@@ -1,4 +1,4 @@
-import { db } from "./index";
+import { db, withDbRetry } from "./index";
 import {
   leagues, leagueMemberships, rosters, fighters, events, bouts,
   scores, transactions, drafts, draftPicks, draftQueues, notifications, profiles,
@@ -8,14 +8,14 @@ import { eq, and, inArray, sql, desc, asc, lte, isNull } from "drizzle-orm";
 // ─── Profiles ──────────────────────────────────────────────────────────────
 
 export async function getProfileById(userId: string) {
-  const [p] = await db.select().from(profiles).where(eq(profiles.id, userId));
+  const [p] = await withDbRetry(() => db.select().from(profiles).where(eq(profiles.id, userId)));
   return p ?? null;
 }
 
 // ─── Leagues ───────────────────────────────────────────────────────────────
 
 export async function getLeagueById(leagueId: string) {
-  const [l] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
+  const [l] = await withDbRetry(() => db.select().from(leagues).where(eq(leagues.id, leagueId)));
   return l ?? null;
 }
 
@@ -37,10 +37,10 @@ export async function getUserLeagues(userId: string) {
 }
 
 export async function getMembership(leagueId: string, userId: string) {
-  const [m] = await db
+  const [m] = await withDbRetry(() => db
     .select()
     .from(leagueMemberships)
-    .where(and(eq(leagueMemberships.leagueId, leagueId), eq(leagueMemberships.userId, userId)));
+    .where(and(eq(leagueMemberships.leagueId, leagueId), eq(leagueMemberships.userId, userId))));
   return m ?? null;
 }
 
@@ -200,7 +200,7 @@ export async function getEventWithBouts(eventId: string) {
 // ─── Draft ────────────────────────────────────────────────────────────────
 
 export async function getDraftByLeagueId(leagueId: string) {
-  const [d] = await db.select().from(drafts).where(eq(drafts.leagueId, leagueId));
+  const [d] = await withDbRetry(() => db.select().from(drafts).where(eq(drafts.leagueId, leagueId)));
   return d ?? null;
 }
 

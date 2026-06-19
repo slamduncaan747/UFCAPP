@@ -13,26 +13,10 @@ import { FightsTab } from "@/components/league/FightsTab";
 import { SettingsTab } from "@/components/league/SettingsTab";
 import { ScoresTab } from "@/components/league/ScoresTab";
 import { DraftBanner } from "@/components/league/DraftBanner";
-import { DiagError } from "@/components/shared/DiagError";
 
 type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 
-// Next signals redirect()/notFound() by throwing — never swallow those.
-function isControlFlow(e: any): boolean {
-  const d = e?.digest;
-  return typeof d === "string" && (d.startsWith("NEXT_REDIRECT") || d === "NEXT_NOT_FOUND" || d.startsWith("NEXT_HTTP"));
-}
-
-export default async function LeaguePage(props: PageProps) {
-  try {
-    return await LeaguePageInner(props);
-  } catch (error) {
-    if (isControlFlow(error)) throw error;
-    return <DiagError where="LeaguePage" error={error} />;
-  }
-}
-
-async function LeaguePageInner({ params, searchParams }: PageProps) {
+export default async function LeaguePage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { tab = "team" } = await searchParams;
   const { profile } = await requireProfile();

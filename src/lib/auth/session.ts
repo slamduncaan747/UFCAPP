@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@/lib/db";
+import { db, withDbRetry } from "@/lib/db";
 import { profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
@@ -17,7 +17,9 @@ export async function requireUser() {
 }
 
 export async function getProfile(userId: string) {
-  const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId));
+  const [profile] = await withDbRetry(() =>
+    db.select().from(profiles).where(eq(profiles.id, userId))
+  );
   return profile ?? null;
 }
 

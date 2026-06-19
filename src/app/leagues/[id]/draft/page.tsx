@@ -2,24 +2,9 @@ import { requireProfile } from "@/lib/auth/session";
 import { getMembership, getDraftByLeagueId, getLeagueById } from "@/lib/db/queries";
 import { notFound } from "next/navigation";
 import { DraftRoom } from "@/components/draft/DraftRoom";
-import { DiagError } from "@/components/shared/DiagError";
 import Link from "next/link";
 
-function isControlFlow(e: any): boolean {
-  const d = e?.digest;
-  return typeof d === "string" && (d.startsWith("NEXT_REDIRECT") || d === "NEXT_NOT_FOUND" || d.startsWith("NEXT_HTTP"));
-}
-
-export default async function DraftPage(props: { params: Promise<{ id: string }> }) {
-  try {
-    return await DraftPageInner(props);
-  } catch (error) {
-    if (isControlFlow(error)) throw error;
-    return <DiagError where="DraftPage" error={error} />;
-  }
-}
-
-async function DraftPageInner({ params }: { params: Promise<{ id: string }> }) {
+export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: leagueId } = await params;
   const { profile } = await requireProfile();
 
