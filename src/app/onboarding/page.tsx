@@ -25,7 +25,7 @@ export default function OnboardingPage() {
     });
 
     if (res.ok) {
-      router.push("/dashboard");
+      router.push("/claim");
     } else {
       toast.error("Failed to set up profile");
       setLoading(false);

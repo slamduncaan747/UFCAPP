@@ -250,6 +250,8 @@ export const leagueMemberships = pgTable(
       .defaultNow(),
     foughtDropUsed: boolean("fought_drop_used").notNull().default(false),
     autodraftEnabled: boolean("autodraft_enabled").notNull().default(false),
+    // Pre-seeded team that a new signup can claim as their own (private-league bootstrap).
+    claimable: boolean("claimable").notNull().default(false),
   },
   (t) => [unique().on(t.leagueId, t.userId)]
 );
