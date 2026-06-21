@@ -25,7 +25,7 @@ export async function getLeagueByInviteCode(code: string) {
 }
 
 export async function getUserLeagues(userId: string) {
-  return db
+  return withDbRetry(() => db
     .select({
       league: leagues,
       membership: leagueMemberships,
@@ -33,7 +33,7 @@ export async function getUserLeagues(userId: string) {
     .from(leagueMemberships)
     .innerJoin(leagues, eq(leagueMemberships.leagueId, leagues.id))
     .where(eq(leagueMemberships.userId, userId))
-    .orderBy(desc(leagues.createdAt));
+    .orderBy(desc(leagues.createdAt)));
 }
 
 export async function getMembership(leagueId: string, userId: string) {
@@ -132,7 +132,7 @@ export async function getFighterLockState(
 // ─── Scores / standings ───────────────────────────────────────────────────
 
 export async function getStandings(leagueId: string) {
-  return db
+  return withDbRetry(() => db
     .select({
       membershipId: leagueMemberships.id,
       teamName: leagueMemberships.teamName,
@@ -145,7 +145,7 @@ export async function getStandings(leagueId: string) {
     .leftJoin(scores, eq(scores.membershipId, leagueMemberships.id))
     .where(eq(leagueMemberships.leagueId, leagueId))
     .groupBy(leagueMemberships.id, leagueMemberships.teamName, leagueMemberships.userId, profiles.displayName)
-    .orderBy(sql`total_points DESC`);
+    .orderBy(sql`total_points DESC`));
 }
 
 export async function getTeamScoreBreakdown(membershipId: string) {
