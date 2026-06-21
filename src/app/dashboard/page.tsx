@@ -1,16 +1,24 @@
 import { requireProfile } from "@/lib/auth/session";
 import { getUserLeagues, getStandings, getUpcomingEvents } from "@/lib/db/queries";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { DashboardHeader } from "@/components/shared/Header";
 import { InviteButton } from "@/components/shared/InviteButton";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ hub?: string }> }) {
   const { profile } = await requireProfile();
+  const { hub } = await searchParams;
   const [userLeagues, nextEvents] = await Promise.all([
     getUserLeagues(profile.id),
     getUpcomingEvents(1),
   ]);
+
+  // Default behavior: drop straight into the most recent league. The league
+  // "Leagues" button links here with ?hub=1 to show this switcher instead.
+  if (!hub && userLeagues.length > 0) {
+    redirect(`/leagues/${userLeagues[0].league.id}?tab=team`);
+  }
 
   return (
     <div style={{ minHeight: "100dvh" }}>
@@ -51,15 +59,16 @@ export default async function DashboardPage() {
         )}
 
         {/* Leagues */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <span className="font-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", textTransform: "uppercase", letterSpacing: 0.3 }}>My Leagues</span>
-          <Link href="/leagues/new" className="btn-primary font-display" style={{
-            padding: "9px 16px",
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 16 }}>
+          <h1 className="ios-large-title">Leagues</h1>
+          <Link href="/leagues/new" className="press font-display" style={{
+            padding: "8px 14px",
             borderRadius: 11,
             fontSize: 13,
             fontWeight: 700,
-            letterSpacing: 0.4,
-            textTransform: "uppercase",
+            letterSpacing: 0.3,
+            color: "var(--accent)",
+            background: "var(--accent-wash)",
             textDecoration: "none",
           }}>
             + New

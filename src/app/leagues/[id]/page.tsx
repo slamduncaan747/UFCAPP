@@ -16,6 +16,11 @@ import { DraftBanner } from "@/components/league/DraftBanner";
 
 type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 
+const TAB_TITLES: Record<string, string> = {
+  team: "Roster", fights: "Fights", standings: "Standings",
+  marketplace: "Market", scores: "Scores", activity: "Activity", settings: "Settings",
+};
+
 export default async function LeaguePage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { tab = "team" } = await searchParams;
@@ -46,7 +51,7 @@ export default async function LeaguePage({ params, searchParams }: PageProps) {
         leagueId={id}
       />
 
-      <main style={{ maxWidth: 480, margin: "0 auto", padding: "16px 16px", paddingBottom: "calc(var(--nav-h) + var(--sab) + 16px)" }}>
+      <main style={{ maxWidth: 480, margin: "0 auto", padding: "8px 16px 0", paddingBottom: "calc(var(--nav-h) + var(--sab) + 16px)" }}>
         <DraftBanner
           leagueId={id}
           leagueStatus={league.status}
@@ -55,6 +60,10 @@ export default async function LeaguePage({ params, searchParams }: PageProps) {
           totalPicks={members.length * 9}
           isCommissioner={membership.role === "commissioner"}
         />
+
+        <h1 className="ios-large-title rise-in" style={{ margin: "8px 2px 16px" }}>
+          {TAB_TITLES[tab] ?? "League"}
+        </h1>
         {tab === "team" && (
           <TeamTab leagueId={id} membershipId={membership.id} userId={profile.id} leagueStatus={league.status} />
         )}

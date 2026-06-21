@@ -312,3 +312,83 @@ input, textarea, select {
   font-family: var(--font-body);
   font-size: 16px; /* prevents iOS zoom on focus */
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   iOS-native UI layer — large-title nav, inset grouped lists, segmented
+   controls, spring press feedback. Used to give screens a real app feel.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Translucent nav bar (44pt) that sits under the status bar */
+.ios-nav {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  height: calc(50px + var(--sat));
+  padding: var(--sat) 8px 0;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+}
+.ios-nav-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: 44px; height: 38px; padding: 0 8px;
+  color: var(--accent); background: transparent; border: none;
+  font-size: 16px; font-weight: 600; cursor: pointer; text-decoration: none;
+  border-radius: 10px; -webkit-tap-highlight-color: transparent;
+  transition: background .15s, transform .1s;
+}
+.ios-nav-btn:active { background: var(--surface-2); transform: scale(0.94); }
+.ios-nav-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Large title block that scrolls under the nav */
+.ios-large-title {
+  font-size: 32px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05;
+  color: var(--text);
+}
+
+/* Inset grouped list (iOS Settings style) */
+.inset-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.inset-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 15px;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+.inset-row + .inset-row::before {
+  content: ""; position: absolute; left: 15px; right: 0; top: 0; height: 1px;
+  background: var(--border);
+}
+.inset-row.tappable { cursor: pointer; transition: background .12s; }
+.inset-row.tappable:active { background: var(--surface-2); }
+.inset-label { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+  color: var(--text-3); padding: 0 4px 7px; }
+.inset-chevron { color: var(--text-3); margin-left: auto; flex-shrink: 0; }
+
+/* Segmented control */
+.segmented {
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.segmented > button {
+  flex: 1; padding: 7px 8px; border: none; border-radius: 9px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; letter-spacing: 0.2px;
+  color: var(--text-2); background: transparent; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.segmented > button[data-active="true"] {
+  background: var(--surface-3); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Spring press feedback for any tappable element */
+.press { transition: transform .12s ease, filter .12s ease; -webkit-tap-highlight-color: transparent; }
+.press:active { transform: scale(0.97); filter: brightness(0.96); }

@@ -26,14 +26,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         eq(waiverClaims.status, "pending"),
       ));
 
-    // Droppable = my roster fighters who have already fought this season.
+    // Droppable = my roster fighters who have NOT yet fought this season.
     const myRoster = await db.select({ roster: rosters, fighter: fighters })
       .from(rosters).innerJoin(fighters, eq(rosters.fighterId, fighters.id))
       .where(eq(rosters.membershipId, membership.id));
     const droppable: any[] = [];
     for (const { roster, fighter } of myRoster) {
       const lock = await getFighterLockState(fighter.id, leagueId);
-      if (lock === "LOCKED") droppable.push({ id: fighter.id, name: fighter.name, weightClass: fighter.weightClass, slot: roster.slot, photoUrl: fighter.photoUrl });
+      if (lock === "UNLOCKED") droppable.push({ id: fighter.id, name: fighter.name, weightClass: fighter.weightClass, slot: roster.slot, photoUrl: fighter.photoUrl });
     }
 
     return NextResponse.json({ period, claims, droppable });
@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const [dropRoster] = await db.select().from(rosters).where(and(eq(rosters.membershipId, membership.id), eq(rosters.fighterId, dropFighterId)));
     if (!dropRoster) return NextResponse.json({ error: "Drop fighter is not on your roster" }, { status: 400 });
     const lock = await getFighterLockState(dropFighterId, leagueId);
-    if (lock !== "LOCKED") return NextResponse.json({ error: "You can only drop a fighter who has already fought" }, { status: 400 });
+    if (lock === "LOCKED") return NextResponse.json({ error: "You can only drop a fighter who hasn't fought yet" }, { status: 400 });
 
     const period = currentWaiverPeriod();
 

@@ -5,7 +5,7 @@
  *  - Each team may win at most ONE claim. We try their priority-1 bid, then
  *    priority-2 if the first is no longer possible.
  *  - A claim is valid only if the add fighter is still a free agent, the drop
- *    fighter is still on the team's roster AND has already fought this season,
+ *    fighter is still on the team's roster AND has NOT yet fought this season,
  *    and the resulting fighter has an open roster slot.
  * Everything for a league runs in one transaction so concurrent free-agent
  * adds can't interleave.
@@ -105,7 +105,7 @@ export async function processLeagueWaivers(leagueId: string, now = new Date()) {
         if (rosteredFighterIds.has(claim.addFighterId)) { await mark(claim.id, "invalid", "Fighter was claimed by another team", null); continue; }
         const [addFighter] = await tx.select().from(fighters).where(eq(fighters.id, claim.addFighterId));
         if (!addFighter) { await mark(claim.id, "invalid", "Fighter unavailable", null); continue; }
-        if (!(await fought(claim.dropFighterId))) { await mark(claim.id, "invalid", "You can only drop a fighter who has already fought", null); continue; }
+        if (await fought(claim.dropFighterId)) { await mark(claim.id, "invalid", "You can only drop a fighter who hasn't fought yet", null); continue; }
 
         const used = new Set(usedSlots.get(membershipId) ?? []);
         used.delete(dropSlot);
@@ -118,7 +118,7 @@ export async function processLeagueWaivers(leagueId: string, now = new Date()) {
           id: nanoid(), membershipId, leagueId, fighterId: claim.addFighterId, slot: slot as any, acquiredVia: "free_agent",
         });
         await tx.insert(transactions).values([
-          { id: nanoid(), leagueId, membershipId, type: "drop", fighterId: claim.dropFighterId, slot: dropSlot as any, wasLockedFighter: true },
+          { id: nanoid(), leagueId, membershipId, type: "drop", fighterId: claim.dropFighterId, slot: dropSlot as any, wasLockedFighter: false },
           { id: nanoid(), leagueId, membershipId, type: "add", fighterId: claim.addFighterId, slot: slot as any, wasLockedFighter: false },
         ]);
         await mark(claim.id, "won", null, slot);

@@ -25,7 +25,9 @@ export async function TeamTab({ leagueId, membershipId, leagueStatus }: {
     <div>
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <span className="font-display" style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", textTransform: "uppercase", letterSpacing: 0.3 }}>Roster</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-3)" }}>
+          {filled === 9 ? "Lineup complete" : `${9 - filled} slot${9 - filled === 1 ? "" : "s"} open`}
+        </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 64, height: 6, borderRadius: 3, background: "var(--surface-3)", overflow: "hidden" }}>
             <div style={{ width: `${(filled / 9) * 100}%`, height: "100%", borderRadius: 3, background: filled < 9 ? "var(--grad-primary)" : "linear-gradient(135deg,#2fe07e,#16a34a)" }} />

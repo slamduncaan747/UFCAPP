@@ -78,12 +78,12 @@ export function WaiverPanel({ leagueId, freeAgents }: { leagueId: string; freeAg
         <div style={{ marginTop: 12 }}>
           <p style={{ fontSize: 12, color: "var(--ufc-text-2)", lineHeight: 1.5, marginBottom: 12 }}>
             Submit up to <strong>2 bids</strong> — you win at most one. Claims process <strong>{niceDate} morning</strong> in
-            reverse draft order (the team that drafted last gets first pick). You can only drop a fighter who has <strong>already fought</strong>.
+            reverse draft order (the team that drafted last gets first pick). You can only drop a fighter who <strong>hasn&apos;t fought yet</strong>.
           </p>
 
           {droppable.length === 0 && (
             <p style={{ fontSize: 12, color: "var(--ufc-text-3)", fontStyle: "italic", marginBottom: 8 }}>
-              None of your fighters have fought yet — you can&apos;t submit a waiver claim until one does.
+              All of your fighters have already fought — there&apos;s no one eligible to drop right now.
             </p>
           )}
 
@@ -116,7 +116,7 @@ export function WaiverPanel({ leagueId, freeAgents }: { leagueId: string; freeAg
                       ))}
                     </select>
                     <select value={form[priority].drop} onChange={(e) => setForm((p) => ({ ...p, [priority]: { ...p[priority], drop: e.target.value } }))} style={selStyle} disabled={droppable.length === 0}>
-                      <option value="">− Drop (already fought)…</option>
+                      <option value="">− Drop (hasn't fought yet)…</option>
                       {droppable.map((d) => (
                         <option key={d.id} value={d.id}>{d.name} ({d.slot})</option>
                       ))}
