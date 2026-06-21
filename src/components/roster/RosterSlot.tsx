@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Headshot } from "@/components/shared/Headshot";
 import { RankTag } from "@/components/shared/Tags";
-import { LockIcon, UnlockIcon, ClockIcon } from "@/components/shared/Icons";
+import { LockIcon, UnlockIcon } from "@/components/shared/Icons";
 import { FighterDetailSheet } from "@/components/roster/FighterDetailSheet";
 
 type RosterSlotProps = {
@@ -18,70 +18,21 @@ type RosterSlotProps = {
   draftPending?: boolean;
 };
 
+const SLOT_W = 40;
+
 export function RosterSlot({ slot, fighter, roster, lockState, leagueId, membershipId, isLive, livePoints, draftPending }: RosterSlotProps) {
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const card: React.CSSProperties = {
-    position: "relative",
-    width: "100%",
-    borderRadius: 14,
-    padding: "13px 14px 13px 16px",
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    textAlign: "left",
-    border: "none",
-    cursor: "pointer",
-    fontFamily: "var(--font-body)",
-    WebkitTapHighlightColor: "transparent",
-    minHeight: 74,
-    overflow: "hidden",
-  };
-
   if (!fighter) {
-    if (draftPending) {
-      return (
-        <div style={{
-          ...card,
-          background: "var(--surface)",
-          border: "1px dashed var(--border)",
-          cursor: "default",
-        }}>
-          <div style={{
-            width: 48, height: 48,
-            borderRadius: 10,
-            background: "var(--surface-2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <ClockIcon size={18} style={{ color: "var(--text-3)" }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
-              {slot}
-            </div>
-            <div style={{ fontSize: 13, color: "var(--text-3)" }}>Filled during draft</div>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div style={{ ...card, background: "var(--surface)", border: "1px dashed var(--border-2)", cursor: "default" }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: 10, background: "var(--surface-2)",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        }}>
-          <span style={{ color: "var(--text-3)", fontSize: 18, fontWeight: 700 }}>—</span>
+      <div className="inset-row" style={{ minHeight: 62 }}>
+        <span style={{ width: SLOT_W, fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }}>{slot}</span>
+        <div style={{ width: 38, height: 38, borderRadius: 19, background: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ color: "var(--text-3)", fontSize: 16 }}>+</span>
         </div>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
-            {slot}
-          </div>
-          <div style={{ fontSize: 13, color: "var(--text-3)" }}>
-            Open · fill via waivers
-          </div>
-        </div>
+        <span style={{ fontSize: 14, color: "var(--text-3)" }}>
+          {draftPending ? "Filled during draft" : "Open · claim via waivers"}
+        </span>
       </div>
     );
   }
@@ -90,53 +41,34 @@ export function RosterSlot({ slot, fighter, roster, lockState, leagueId, members
 
   return (
     <>
-      <button
-        onClick={() => setDetailOpen(true)}
-        className="card-premium"
-        style={{ ...card }}
-      >
-        {/* Status rail */}
-        <span aria-hidden style={{
-          position: "absolute", left: 0, top: 0, bottom: 0, width: 3,
-          background: isLive ? "var(--grad-primary)" : isLocked ? "var(--frost)" : "var(--green)",
-          opacity: isLive ? 1 : 0.7,
-        }} />
-        <Headshot name={fighter.name} photoUrl={fighter.photoUrl} weightClass={fighter.weightClass} size={48} isLive={isLive} />
-
+      <button onClick={() => setDetailOpen(true)} className="inset-row tappable" style={{ width: "100%", textAlign: "left", border: "none", background: "transparent", minHeight: 62 }}>
+        <span style={{ width: SLOT_W, fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }}>{slot}</span>
+        <Headshot name={fighter.name} photoUrl={fighter.photoUrl} weightClass={fighter.weightClass} size={40} isLive={isLive} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {fighter.name}
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 15.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: -0.01 }}>{fighter.name}</span>
             {fighter.isChampion && <RankTag isChamp />}
             {!fighter.isChampion && fighter.currentRanking && <RankTag rank={fighter.currentRanking} />}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-              {slot}
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)" }}>·</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
             {isLocked ? (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--frost)", display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--frost)", display: "inline-flex", alignItems: "center", gap: 3 }}>
                 <LockIcon size={10} /> Locked
               </span>
             ) : (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--green)", display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--green)", display: "inline-flex", alignItems: "center", gap: 3 }}>
                 <UnlockIcon size={10} /> Active
               </span>
             )}
+            <span style={{ color: "var(--text-3)", fontSize: 11 }}>·</span>
+            <span className="font-num" style={{ fontSize: 11.5, color: "var(--text-3)" }}>{fighter.recordW ?? 0}–{fighter.recordL ?? 0}</span>
           </div>
         </div>
-
-        <div style={{ flexShrink: 0, textAlign: "right" }}>
+        <div style={{ flexShrink: 0, textAlign: "right", display: "flex", alignItems: "center", gap: 8 }}>
           {livePoints !== undefined && (
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--red)", marginBottom: 2 }}>
-              +{livePoints}
-            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--accent)" }}>+{livePoints}</span>
           )}
-          <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "var(--font-num)", color: "var(--text-2)" }}>
-            {fighter.recordW ?? 0}–{fighter.recordL ?? 0}
-          </div>
+          <svg width="9" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
         </div>
       </button>
 

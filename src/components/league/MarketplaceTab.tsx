@@ -68,6 +68,7 @@ export function MarketplaceTab({ leagueId, leagueStatus }: { leagueId: string; m
   const filtered = fighters.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()));
   const niceDate = period ? new Date(period + "T12:00:00Z").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "Monday";
   const bids = claims.map((c) => ({ bidPriority: c.claim.bidPriority, addFighterId: c.claim.addFighterId }));
+  const bidByFighter = new Map(claims.map((c) => [c.claim.addFighterId, c.claim.bidPriority]));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -145,11 +146,22 @@ export function MarketplaceTab({ leagueId, leagueStatus }: { leagueId: string; m
                     {f.draftScore != null && <span style={{ fontSize: 11, color: "var(--text-3)" }}>★ {f.draftScore}</span>}
                   </div>
                 </div>
-                <button onClick={() => setClaimTarget(f)} className="press" style={{
-                  flexShrink: 0, padding: "7px 14px", borderRadius: 10, cursor: "pointer",
-                  background: "var(--accent-wash)", color: "var(--accent)", border: "none",
-                  fontSize: 13, fontWeight: 700,
-                }}>Claim</button>
+                {bidByFighter.has(f.id) ? (
+                  <button onClick={() => setClaimTarget(f)} className="press" style={{
+                    flexShrink: 0, padding: "7px 12px", borderRadius: 10, cursor: "pointer",
+                    background: "rgba(47,224,126,0.12)", color: "var(--green)", border: "none",
+                    fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4,
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                    Bid {bidByFighter.get(f.id)}
+                  </button>
+                ) : (
+                  <button onClick={() => setClaimTarget(f)} className="press" style={{
+                    flexShrink: 0, padding: "7px 14px", borderRadius: 10, cursor: "pointer",
+                    background: "var(--accent-wash)", color: "var(--accent)", border: "none",
+                    fontSize: 13, fontWeight: 700,
+                  }}>Claim</button>
+                )}
               </div>
             ))}
           </div>

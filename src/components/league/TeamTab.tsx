@@ -74,7 +74,7 @@ export async function TeamTab({ leagueId, membershipId, leagueStatus }: {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="inset-group">
         {ALL_SLOTS.map((slot) => {
           const entry = slotMap.get(slot);
           const lockState = entry ? lockStates.get(entry.fighter.id) : undefined;

@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TrophyIcon, ShareIcon } from "@/components/shared/Icons";
-import { Button } from "@/components/ui/button";
-import { useEffect } from "react";
 
 type Standing = { membershipId: string; userId: string; teamName: string; displayName: string; totalPoints: number };
 
@@ -43,72 +41,56 @@ export function StandingsTab({ leagueId, userId, leagueName, inviteCode }: {
   if (standings.length === 0) {
     return (
       <div className="py-16 text-center">
-        <TrophyIcon size={32} style={{ color: "var(--ufc-text-3)", margin: "0 auto 12px" }} />
-        <p className="font-display font-bold uppercase mb-1">No standings yet</p>
-        <p className="text-sm" style={{ color: "var(--ufc-text-2)" }}>Points will appear after events complete.</p>
+        <TrophyIcon size={32} style={{ color: "var(--text-3)", margin: "0 auto 12px" }} />
+        <p style={{ fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>No standings yet</p>
+        <p className="text-sm" style={{ color: "var(--text-2)" }}>Points appear after events complete.</p>
       </div>
     );
   }
 
-  const medalGrad = ["var(--grad-gold)", "var(--grad-silver)", "var(--grad-bronze)"];
   const leaderPoints = Number(standings[0]?.totalPoints ?? 0);
+  const medalColor = ["var(--gold)", "#cbd2dc", "#cd8e54"];
 
   return (
-    <div className="space-y-2.5 rise-in">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-bold text-xl uppercase tracking-wide">Standings</h2>
-        <Button variant="outline" size="sm" onClick={shareStandings}
-          className="flex items-center gap-1.5 font-display font-bold uppercase text-xs"
-          style={{ border: "1px solid var(--ufc-border-2)", color: "var(--ufc-text-2)", borderRadius: 10 }}>
-          <ShareIcon size={13} />
+    <div className="rise-in">
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+        <button onClick={shareStandings} className="press" style={{
+          display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 11,
+          background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-2)",
+          fontSize: 13, fontWeight: 600, cursor: "pointer",
+        }}>
+          <ShareIcon size={14} />
           {shared ? "Copied!" : "Share"}
-        </Button>
+        </button>
       </div>
 
-      {standings.map((s, i) => {
-        const isMe = s.userId === userId;
-        const isPodium = i < 3;
-        const points = Number(s.totalPoints);
-        const gap = i === 0 ? 0 : leaderPoints - points;
-        return (
-          <div
-            key={s.membershipId}
-            className="card-premium flex items-center gap-3 p-3.5"
-            style={ isMe ? { background: "var(--accent-wash)", borderColor: "var(--accent-glow)" } : undefined }
-          >
-            {/* Rank medallion */}
-            <div className="flex-shrink-0 flex items-center justify-center" style={{
-              width: 36, height: 36, borderRadius: 11,
-              background: isPodium ? medalGrad[i] : "var(--surface-3)",
-              boxShadow: i === 0 ? "var(--shadow-gold)" : "none",
-            }}>
-              <span className="font-hero" style={{
-                fontSize: isPodium ? 16 : 14,
-                color: isPodium ? "#1a1207" : "var(--text-2)",
-                lineHeight: 1,
-              }}>
+      <div className="inset-group">
+        {standings.map((s, i) => {
+          const isMe = s.userId === userId;
+          const points = Number(s.totalPoints);
+          const gap = i === 0 ? 0 : leaderPoints - points;
+          return (
+            <div key={s.membershipId} className="inset-row" style={{ background: isMe ? "var(--accent-wash)" : "transparent", minHeight: 60 }}>
+              <span style={{ width: 26, textAlign: "center", flexShrink: 0, fontSize: 17, fontWeight: 800, color: i < 3 ? medalColor[i] : "var(--text-3)", fontFamily: "var(--font-num)" }}>
                 {i + 1}
               </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-display font-bold uppercase truncate" style={{ color: "var(--text)", letterSpacing: 0.2 }}>
-                {s.teamName}
-                {isMe && <span className="ml-2 text-[10px] font-bold lowercase px-1.5 py-0.5 rounded" style={{ color: "var(--accent)", background: "var(--accent-wash)" }}>you</span>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ fontSize: 15.5, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: -0.01 }}>{s.teamName}</span>
+                  {isMe && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", background: "var(--accent-wash)", padding: "1px 6px", borderRadius: 5 }}>YOU</span>}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 1 }}>
+                  {s.displayName}{gap > 0 && <span> · −{gap.toLocaleString()}</span>}
+                </div>
               </div>
-              <div className="text-xs" style={{ color: "var(--text-3)" }}>
-                {s.displayName}
-                {gap > 0 && <span style={{ marginLeft: 6, color: "var(--text-3)" }}>· −{gap.toLocaleString()}</span>}
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div className="font-num" style={{ fontSize: 18, fontWeight: 700, color: i === 0 ? "var(--gold)" : "var(--text)", lineHeight: 1 }}>{points.toLocaleString()}</div>
+                <div style={{ fontSize: 8.5, color: "var(--text-3)", letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>pts</div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="font-hero" style={{ fontSize: 21, lineHeight: 1, color: i === 0 ? "transparent" : "var(--text)" }}>
-                <span className={i === 0 ? "grad-text-gold" : ""}>{points.toLocaleString()}</span>
-              </div>
-              <div className="font-display" style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: 1, textTransform: "uppercase", marginTop: 1 }}>pts</div>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
