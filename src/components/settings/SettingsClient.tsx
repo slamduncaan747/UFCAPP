@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ChevronLeftIcon, UserIcon } from "@/components/shared/Icons";
+import { ChevronLeftIcon } from "@/components/shared/Icons";
 import { Headshot } from "@/components/shared/Headshot";
 
 const TIMEZONES = [

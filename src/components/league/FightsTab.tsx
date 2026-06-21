@@ -1,9 +1,8 @@
 import { getUpcomingEvents, getAllRostersForLeague } from "@/lib/db/queries";
 import { db } from "@/lib/db";
-import { bouts, fighters, events } from "@/lib/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { bouts, fighters } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { Headshot } from "@/components/shared/Headshot";
-import { DivTag, RankTag } from "@/components/shared/Tags";
 import { ClockIcon, BoltIcon } from "@/components/shared/Icons";
 import { formatDistanceToNow, format } from "date-fns";
 
@@ -20,7 +19,6 @@ export async function FightsTab({ leagueId }: { leagueId: string }) {
   }
 
   const allRosters = await getAllRostersForLeague(leagueId);
-  const rosteredFighterIds = new Set(allRosters.map((r) => r.fighter.id));
   const fighterOwnership = new Map<string, string>(); // fighterId -> teamName
   for (const { fighter, membership } of allRosters) {
     fighterOwnership.set(fighter.id, membership.teamName);

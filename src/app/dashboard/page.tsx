@@ -74,16 +74,16 @@ export default async function DashboardPage() {
             border: "1px solid var(--border)",
             textAlign: "center",
           }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>🏆</div>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🥊</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
-              No leagues yet
+              You&apos;re not in the league yet
             </div>
             <div style={{ fontSize: 14, color: "var(--text-2)", marginBottom: 24, lineHeight: 1.5 }}>
-              Create a league and invite your friends, or join one with an invite code.
+              Claim your team to see your roster and standings.
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-              <Link href="/leagues/new" style={{
-                padding: "12px 20px",
+              <Link href="/claim" style={{
+                padding: "12px 24px",
                 borderRadius: 12,
                 background: "var(--accent)",
                 color: "#fff",
@@ -91,18 +91,7 @@ export default async function DashboardPage() {
                 fontWeight: 700,
                 textDecoration: "none",
               }}>
-                Create League
-              </Link>
-              <Link href="/leagues/join" style={{
-                padding: "12px 20px",
-                borderRadius: 12,
-                border: "1px solid var(--border-2)",
-                color: "var(--text-2)",
-                fontSize: 14,
-                fontWeight: 600,
-                textDecoration: "none",
-              }}>
-                Join League
+                Claim My Team
               </Link>
             </div>
           </div>
@@ -111,21 +100,6 @@ export default async function DashboardPage() {
             {userLeagues.map(({ league, membership }) => (
               <LeagueCard key={league.id} league={league} membership={membership} userId={profile.id} />
             ))}
-
-            <Link href="/leagues/join" style={{
-              display: "block",
-              padding: "14px",
-              borderRadius: 14,
-              border: "1px solid var(--border-2)",
-              color: "var(--text-3)",
-              fontSize: 14,
-              fontWeight: 600,
-              textAlign: "center",
-              textDecoration: "none",
-              marginTop: 4,
-            }}>
-              Join with Invite Code
-            </Link>
           </div>
         )}
       </main>

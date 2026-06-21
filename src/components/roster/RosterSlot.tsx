@@ -3,15 +3,8 @@
 import { useState } from "react";
 import { Headshot } from "@/components/shared/Headshot";
 import { RankTag } from "@/components/shared/Tags";
-import { LockIcon, UnlockIcon, PlusIcon, ClockIcon } from "@/components/shared/Icons";
+import { LockIcon, UnlockIcon, ClockIcon } from "@/components/shared/Icons";
 import { FighterDetailSheet } from "@/components/roster/FighterDetailSheet";
-import { AddFighterSheet } from "@/components/roster/AddFighterSheet";
-
-const DIV_LABELS: Record<string, string> = {
-  FLW: "Flyweight", BW: "Bantamweight", FW: "Featherweight", LW: "Lightweight",
-  WW: "Welterweight", MW: "Middleweight", LHW: "Light HW", HW: "Heavyweight",
-  WILDCARD: "Wildcard",
-};
 
 type RosterSlotProps = {
   slot: string;
@@ -27,7 +20,6 @@ type RosterSlotProps = {
 
 export function RosterSlot({ slot, fighter, roster, lockState, leagueId, membershipId, isLive, livePoints, draftPending }: RosterSlotProps) {
   const [detailOpen, setDetailOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
 
   const card: React.CSSProperties = {
     position: "relative",
@@ -75,37 +67,22 @@ export function RosterSlot({ slot, fighter, roster, lockState, leagueId, members
     }
 
     return (
-      <>
-        <button
-          onClick={() => setAddOpen(true)}
-          style={{
-            ...card,
-            background: "var(--surface)",
-            border: "1px dashed var(--border-2)",
-          }}
-        >
-          <div style={{
-            width: 48, height: 48,
-            borderRadius: 10,
-            background: "rgba(234,179,8,0.07)",
-            border: "1px dashed rgba(234,179,8,0.25)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            <PlusIcon size={18} style={{ color: "var(--gold)" }} />
+      <div style={{ ...card, background: "var(--surface)", border: "1px dashed var(--border-2)", cursor: "default" }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 10, background: "var(--surface-2)",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <span style={{ color: "var(--text-3)", fontSize: 18, fontWeight: 700 }}>—</span>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
+            {slot}
           </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--gold)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
-              {slot}
-            </div>
-            <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-              Add {DIV_LABELS[slot]}
-            </div>
+          <div style={{ fontSize: 13, color: "var(--text-3)" }}>
+            Open · fill via waivers
           </div>
-        </button>
-
-        <AddFighterSheet open={addOpen} onClose={() => setAddOpen(false)} slot={slot} leagueId={leagueId} membershipId={membershipId} />
-      </>
+        </div>
+      </div>
     );
   }
 

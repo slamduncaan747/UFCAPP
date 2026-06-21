@@ -3,7 +3,7 @@ import {
   leagues, leagueMemberships, rosters, fighters, events, bouts,
   scores, transactions, drafts, draftPicks, draftQueues, notifications, profiles,
 } from "./schema";
-import { eq, and, inArray, sql, desc, asc, lte, isNull } from "drizzle-orm";
+import { eq, and, sql, desc, asc, lte, isNull } from "drizzle-orm";
 
 // ─── Profiles ──────────────────────────────────────────────────────────────
 

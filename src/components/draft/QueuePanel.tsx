@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { Headshot } from "@/components/shared/Headshot";
 import { DivTag } from "@/components/shared/Tags";
 import { toast } from "sonner";
