@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Headshot } from "@/components/shared/Headshot";
 import { DivTag, RankTag } from "@/components/shared/Tags";
 import { SearchIcon, ClockIcon } from "@/components/shared/Icons";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { WaiverPanel } from "./WaiverPanel";
 
 const SLOTS = ["FLW", "BW", "FW", "LW", "WW", "MW", "LHW", "HW", "WILDCARD"] as const;
@@ -16,14 +13,11 @@ const DIV_LABELS: Record<string, string> = {
   WW: "Welterweight", MW: "Middleweight", LHW: "Light HW", HW: "Heavyweight",
 };
 
-export function MarketplaceTab({ leagueId, membershipId, leagueStatus }: { leagueId: string; membershipId: string; leagueStatus: string }) {
-  const router = useRouter();
+export function MarketplaceTab({ leagueId, leagueStatus }: { leagueId: string; membershipId: string; leagueStatus: string }) {
   const [fighters, setFighters] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("");
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState<string | null>(null);
-  const [addingSlot, setAddingSlot] = useState<Record<string, string>>({});
 
   async function load() {
     setLoading(true);
@@ -39,27 +33,6 @@ export function MarketplaceTab({ leagueId, membershipId, leagueStatus }: { leagu
   const filtered = fighters.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase())
   );
-
-  async function handleAdd(fighter: any) {
-    const slot = addingSlot[fighter.id] || fighter.weightClass;
-    setAdding(fighter.id);
-    try {
-      const res = await fetch(`/api/leagues/${leagueId}/transactions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "add", fighterId: fighter.id, slot }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Add failed");
-      toast.success(`Added ${fighter.name}!`);
-      router.refresh();
-      load();
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setAdding(null);
-    }
-  }
 
   const draftPending = leagueStatus === "setup" || leagueStatus === "drafting";
 
@@ -132,22 +105,9 @@ export function MarketplaceTab({ leagueId, membershipId, leagueStatus }: { leagu
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Slot selector for wildcard-eligible */}
-              <select
-                value={addingSlot[fighter.id] || fighter.weightClass}
-                onChange={(e) => setAddingSlot((p) => ({ ...p, [fighter.id]: e.target.value }))}
-                className="text-xs px-2 py-1 rounded"
-                style={{ background: "var(--ufc-surface-3)", border: "1px solid var(--ufc-border)", color: "var(--ufc-text-2)", outline: "none" }}>
-                <option value={fighter.weightClass}>{fighter.weightClass}</option>
-                <option value="WILDCARD">WILDCARD</option>
-              </select>
-              <Button size="sm" onClick={() => handleAdd(fighter)} disabled={adding === fighter.id}
-                style={{ background: "var(--ufc-accent)", color: "var(--ufc-accent-ink)" }}
-                className="font-display font-bold uppercase text-xs">
-                {adding === fighter.id ? "…" : "Add"}
-              </Button>
-            </div>
+            {fighter.draftScore != null && (
+              <span className="font-num text-xs flex-shrink-0" style={{ color: "var(--ufc-text-3)" }}>★ {fighter.draftScore}</span>
+            )}
           </div>
         ))}
       </div>
