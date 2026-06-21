@@ -1,6 +1,29 @@
 # Operations: data pipeline, crons, waivers
 
-## Data / scraping strategy
+## Live data: direct ufcstats.com scraper (`src/lib/ufcStats`)
+
+`syncFromUfcStats()` scrapes ufcstats.com HTML directly (cheerio) and upserts into
+the app's `events` / `bouts` / `fighters` tables — no separate data project needed.
+
+- Pulls **every upcoming event** (future bouts → `status = scheduled`) plus the
+  **most recent completed events** (results → winner/method/round). Any fighter
+  not yet in the DB is scraped and inserted (men's only; women's bouts skipped).
+- Triggers:
+  - **Cron**: `/api/jobs/scrape-ufcstats` daily (Vercel Cron, secured by `CRON_SECRET`).
+  - **On demand**: commissioners get a **"Sync UFC Data Now"** button in League →
+    Settings (`POST /api/leagues/[id]/sync`). Use it right after an event for a
+    near-live refresh (Hobby cron only fires once/day).
+- **Egress**: production (Vercel) reaches ufcstats.com fine. The Claude web sandbox
+  blocks it via an egress allow-list, so the scraper can't be exercised from there —
+  it was written against ufcstats' known HTML structure; the sync returns parse
+  stats + an `errors[]` array so the first real run surfaces any selector drift.
+- Pages parsed: `/statistics/events/{upcoming,completed}?page=all`,
+  `/event-details/{id}`, `/fighter-details/{id}`.
+
+The older `syncUfcData()` (mirror from a separate scraped Supabase project) still
+exists but is no longer the scheduled path.
+
+## Data / scraping strategy (legacy mirror)
 
 The app does **not** scrape directly. It mirrors a separate "scraped UFC data"
 Supabase project (ufcstats.com → Postgres) via PostgREST (`src/lib/ufcData`).

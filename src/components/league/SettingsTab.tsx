@@ -13,6 +13,22 @@ export function SettingsTab({ league, membership, memberCount }: Props) {
   const isCommissioner = membership.role === "commissioner";
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncData() {
+    setSyncing(true);
+    try {
+      const res = await fetch(`/api/leagues/${league.id}/sync`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Sync failed");
+      toast.success(`Synced — ${data.eventsUpserted} events, ${data.boutsUpserted} bouts, +${data.fightersAdded} fighters`);
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const joinUrl = typeof window !== "undefined"
     ? `${window.location.origin}/leagues/join?code=${league.inviteCode}`
@@ -57,8 +73,6 @@ export function SettingsTab({ league, membership, memberCount }: Props) {
 
   return (
     <div className="space-y-5">
-      <h2 className="font-display font-bold text-xl uppercase tracking-wide">Settings</h2>
-
       {/* Invite section */}
       <div className="card-premium p-5 space-y-4">
         <div className="flex items-center justify-between">
@@ -125,6 +139,24 @@ export function SettingsTab({ league, membership, memberCount }: Props) {
             </a>{" "}
             first to check the board.
           </p>
+        </div>
+      )}
+
+      {/* Live data sync (commissioner) */}
+      {isCommissioner && (
+        <div className="card-premium p-5 space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <ClockIcon size={15} style={{ color: "var(--accent)" }} />
+            <span className="font-display font-bold uppercase text-sm tracking-wide" style={{ color: "var(--text)" }}>
+              UFC Data
+            </span>
+          </div>
+          <p className="text-sm" style={{ color: "var(--text-2)" }}>
+            Pull the latest cards and results from ufcstats.com. Runs automatically once a day — tap to refresh now (e.g. right after an event).
+          </p>
+          <Button onClick={syncData} disabled={syncing} className="btn-primary w-full font-display font-bold uppercase tracking-wide" style={{ borderRadius: 12 }}>
+            {syncing ? "Syncing…" : "Sync UFC Data Now"}
+          </Button>
         </div>
       )}
 
