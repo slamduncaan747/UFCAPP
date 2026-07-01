@@ -156,6 +156,18 @@ export type ModalType =
 
 export type TabRoute = 'roster' | 'fights' | 'standings' | 'market' | 'settings';
 
+// ─── Ownership ───────────────────────────────────────────────────────────────
+// Who owns a given fighter within a league. Surfaced across fight cards, event
+// detail and fighter detail so the app feels connected: every fighter you see
+// tells you which team holds them (and highlights your own).
+export interface FighterOwner {
+  membership_id: string;
+  team_name: string;
+  is_mine: boolean;
+}
+
+export type OwnershipMap = Record<string, FighterOwner>;
+
 export const WEIGHT_CLASSES = [
   'Strawweight',
   'Flyweight',

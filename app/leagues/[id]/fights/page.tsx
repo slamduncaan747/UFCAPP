@@ -9,6 +9,7 @@ import { EventWithBouts, BoutWithFighters, Bout } from '@/lib/types';
 import LiveMatchup from '@/components/LiveMatchup';
 import EventDetailModal from '@/components/EventDetailModal';
 import { CardSkeletonList } from '@/components/Skeleton';
+import { useOwnership } from '@/lib/useOwnership';
 
 interface FightsPageProps {
   params: Promise<{ id: string }>;
@@ -16,51 +17,13 @@ interface FightsPageProps {
 
 export default function FightsPage({ params }: FightsPageProps) {
   const { id: leagueId } = use(params);
+  const { ownership } = useOwnership(leagueId);
   const [events, setEvents] = useState<EventWithBouts[]>([]);
-  const [myFighterIds, setMyFighterIds] = useState<string[]>([]);
-  const [allRosteredIds, setAllRosteredIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const supabase = createClient();
 
   const loadData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // My fighter IDs
-    const { data: myMembership } = await supabase
-      .from('league_memberships')
-      .select('id')
-      .eq('league_id', leagueId)
-      .eq('user_id', user.id)
-      .eq('claimable', false)
-      .single();
-
-    let myIds: string[] = [];
-    if (myMembership) {
-      const { data: myRoster } = await supabase
-        .from('rosters')
-        .select('fighter_id')
-        .eq('membership_id', myMembership.id);
-      myIds = (myRoster ?? []).map((r: { fighter_id: string }) => r.fighter_id);
-    }
-
-    // All league rostered IDs
-    const { data: allMemberships } = await supabase
-      .from('league_memberships')
-      .select('id')
-      .eq('league_id', leagueId);
-
-    const membershipIds = (allMemberships ?? []).map((m: { id: string }) => m.id);
-    let allIds: string[] = [];
-    if (membershipIds.length > 0) {
-      const { data: allRosters } = await supabase
-        .from('rosters')
-        .select('fighter_id')
-        .in('membership_id', membershipIds);
-      allIds = (allRosters ?? []).map((r: { fighter_id: string }) => r.fighter_id);
-    }
-
     // Fetch events with bouts
     const { data: eventsData } = await supabase
       .from('events')
@@ -75,16 +38,11 @@ export default function FightsPage({ params }: FightsPageProps) {
       .order('event_date', { ascending: false })
       .limit(10);
 
-    const enrichedEvents: EventWithBouts[] = (eventsData ?? []).map((ev) => {
-      const bouts = (ev.bouts ?? []) as BoutWithFighters[];
-      const rosteredCount = bouts.filter(
-        (b) => allIds.includes(b.fighter_a_id) || allIds.includes(b.fighter_b_id)
-      ).length;
-      return { ...ev, bouts, rostered_count: rosteredCount };
-    });
+    const enrichedEvents: EventWithBouts[] = (eventsData ?? []).map((ev) => ({
+      ...ev,
+      bouts: (ev.bouts ?? []) as BoutWithFighters[],
+    }));
 
-    setMyFighterIds(myIds);
-    setAllRosteredIds(allIds);
     setEvents(enrichedEvents);
     setLoading(false);
   }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -128,19 +86,40 @@ export default function FightsPage({ params }: FightsPageProps) {
           {title}
         </h2>
         <div className="space-y-4">
-          {evs.map((ev, i) => (
+          {evs.map((ev, i) => {
+            const fighterIds = ev.bouts.flatMap((b) => [b.fighter_a_id, b.fighter_b_id]);
+            const rosteredInEvent = fighterIds.filter((fid) => ownership[fid]).length;
+            const mineInEvent = fighterIds.filter((fid) => ownership[fid]?.is_mine).length;
+            return (
             <div key={ev.id} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 6) * 50}ms` }}>
               {/* Event header */}
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[12px] font-black uppercase tracking-tighter text-zinc-400">
-                  {ev.title}
-                </h3>
-                <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">
-                  {new Date(ev.event_date).toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric',
-                  })}
-                </span>
-              </div>
+              <button
+                onClick={() => setSelectedEventId(ev.id)}
+                className="w-full flex items-center justify-between mb-2 text-left group"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <h3 className="text-[12px] font-black uppercase tracking-tighter text-zinc-300 truncate group-hover:text-white transition-colors">
+                    {ev.title}
+                  </h3>
+                  {mineInEvent > 0 && (
+                    <span className="flex-shrink-0 text-[8px] font-black bg-emerald-500 text-black px-1.5 py-0.5 rounded uppercase tracking-widest">
+                      {mineInEvent} You
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  {rosteredInEvent > 0 && (
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">
+                      {rosteredInEvent} Rostered
+                    </span>
+                  )}
+                  <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">
+                    {new Date(ev.event_date).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric',
+                    })}
+                  </span>
+                </div>
+              </button>
               <div className="space-y-2">
                 {[...ev.bouts]
                   .sort((a, b) => (b.is_main_event ? 1 : 0) - (a.is_main_event ? 1 : 0))
@@ -148,18 +127,14 @@ export default function FightsPage({ params }: FightsPageProps) {
                     <LiveMatchup
                       key={bout.id}
                       bout={{ ...bout, event: ev }}
-                      rosteredCount={
-                        [bout.fighter_a_id, bout.fighter_b_id].filter((fid) =>
-                          allRosteredIds.includes(fid)
-                        ).length
-                      }
-                      currentManagerFighterIds={myFighterIds}
+                      ownership={ownership}
                       onClick={() => setSelectedEventId(ev.id)}
                     />
                   ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );

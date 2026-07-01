@@ -115,7 +115,10 @@ export default function BottomNav({ leagueId }: BottomNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-[#030303]/95 backdrop-blur-xl border-t border-zinc-800 pt-3 pb-[calc(env(safe-area-inset-bottom)+16px)] z-50 flex justify-around shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
+    <nav className="fixed bottom-0 left-0 right-0 bg-[#050506] border-t border-zinc-800/80 pt-3 pb-[calc(env(safe-area-inset-bottom)+16px)] z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.6)]">
+      {/* Scrim so scrolling content dissolves into the bar instead of bleeding under it */}
+      <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-[#050506] to-transparent" />
+      <div className="max-w-md mx-auto flex justify-around">
       {tabs.map((tab) => {
         const href = tab.href(leagueId);
         const active = pathname === href;
@@ -141,6 +144,7 @@ export default function BottomNav({ leagueId }: BottomNavProps) {
           </Link>
         );
       })}
+      </div>
     </nav>
   );
 }

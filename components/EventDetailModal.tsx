@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { BoutWithFighters, Event } from '@/lib/types';
+import { BoutWithFighters, Event, OwnershipMap } from '@/lib/types';
 import SlideUpModal from './SlideUpModal';
 
 interface EventDetailModalProps {
@@ -12,14 +12,11 @@ interface EventDetailModalProps {
   onClose: () => void;
 }
 
-interface OwnershipMap {
-  [fighterId: string]: string; // fighter_id → manager display_name
-}
-
 export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }: EventDetailModalProps) {
   const [event, setEvent] = useState<Event | null>(null);
   const [bouts, setBouts] = useState<BoutWithFighters[]>([]);
   const [ownership, setOwnership] = useState<OwnershipMap>({});
+  const [points, setPoints] = useState<Record<string, number>>({}); // `${boutId}:${fighterId}` → pts
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
@@ -28,45 +25,69 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
     setLoading(true);
 
     async function load() {
-      // Fetch event
+      const { data: { user } } = await supabase.auth.getUser();
+
       const { data: ev } = await supabase.from('events').select('*').eq('id', eventId).single();
 
-      // Fetch bouts with fighters
       const { data: boutsData } = await supabase
         .from('bouts')
         .select('*, fighter_a:fighters!bouts_fighter_a_id_fkey(*), fighter_b:fighters!bouts_fighter_b_id_fkey(*)')
         .eq('event_id', eventId)
         .order('is_main_event', { ascending: false });
 
-      // Build ownership map: fetch all memberships + rosters in this league
+      const boutList = (boutsData as BoutWithFighters[]) ?? [];
+
+      // Ownership across the whole league.
       const { data: memberships } = await supabase
         .from('league_memberships')
-        .select('id, team_name')
+        .select('id, team_name, user_id')
         .eq('league_id', leagueId)
         .eq('claimable', false);
 
-      const membershipIds = (memberships ?? []).map((m: { id: string; team_name: string }) => m.id);
-      let ownerMap: OwnershipMap = {};
+      const myMembership = (memberships ?? []).find(
+        (m: { user_id: string | null }) => user && m.user_id === user.id
+      );
+
+      const membershipIds = (memberships ?? []).map((m: { id: string }) => m.id);
+      const ownerMap: OwnershipMap = {};
 
       if (membershipIds.length > 0) {
+        const nameById: Record<string, string> = {};
+        (memberships ?? []).forEach((m: { id: string; team_name: string }) => {
+          nameById[m.id] = m.team_name;
+        });
+
         const { data: rosters } = await supabase
           .from('rosters')
           .select('fighter_id, membership_id')
           .in('membership_id', membershipIds);
 
-        const membershipNameMap: Record<string, string> = {};
-        (memberships ?? []).forEach((m: { id: string; team_name: string }) => {
-          membershipNameMap[m.id] = m.team_name;
-        });
-
         (rosters ?? []).forEach((r: { fighter_id: string; membership_id: string }) => {
-          ownerMap[r.fighter_id] = membershipNameMap[r.membership_id] ?? 'Unknown';
+          ownerMap[r.fighter_id] = {
+            membership_id: r.membership_id,
+            team_name: nameById[r.membership_id] ?? 'Unknown',
+            is_mine: r.membership_id === myMembership?.id,
+          };
+        });
+      }
+
+      // Fantasy points earned in this event's bouts.
+      const boutIds = boutList.map((b) => b.id);
+      const ptsMap: Record<string, number> = {};
+      if (boutIds.length > 0) {
+        const { data: scores } = await supabase
+          .from('scores')
+          .select('bout_id, fighter_id, points')
+          .in('bout_id', boutIds);
+        (scores ?? []).forEach((s: { bout_id: string; fighter_id: string; points: number }) => {
+          ptsMap[`${s.bout_id}:${s.fighter_id}`] = s.points;
         });
       }
 
       setEvent(ev ?? null);
-      setBouts((boutsData as BoutWithFighters[]) ?? []);
+      setBouts(boutList);
       setOwnership(ownerMap);
+      setPoints(ptsMap);
       setLoading(false);
     }
 
@@ -78,6 +99,10 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
     : event?.status === 'completed'
     ? 'text-zinc-500'
     : 'text-blue-300';
+
+  const fighterIds = bouts.flatMap((b) => [b.fighter_a_id, b.fighter_b_id]);
+  const rosteredCount = fighterIds.filter((fid) => ownership[fid]).length;
+  const mineCount = fighterIds.filter((fid) => ownership[fid]?.is_mine).length;
 
   return (
     <SlideUpModal isOpen={isOpen} onClose={onClose}>
@@ -109,6 +134,22 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
                 weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
               }).toUpperCase()}
             </p>
+
+            {/* Summary stats */}
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <div className="bg-[#050507] border border-zinc-800 rounded-lg py-2 text-center">
+                <span className="block text-[18px] font-black text-white tabular-nums leading-none">{bouts.length}</span>
+                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Bouts</span>
+              </div>
+              <div className="bg-[#050507] border border-zinc-800 rounded-lg py-2 text-center">
+                <span className="block text-[18px] font-black text-white tabular-nums leading-none">{rosteredCount}</span>
+                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Rostered</span>
+              </div>
+              <div className="bg-[#050507] border border-emerald-800/40 rounded-lg py-2 text-center">
+                <span className="block text-[18px] font-black text-emerald-400 tabular-nums leading-none">{mineCount}</span>
+                <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Yours</span>
+              </div>
+            </div>
           </div>
 
           {/* Bout list */}
@@ -122,44 +163,69 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
               const aWon = bout.winner_id === bout.fighter_a_id;
               const bWon = bout.winner_id === bout.fighter_b_id;
 
+              const aPts = points[`${bout.id}:${bout.fighter_a_id}`];
+              const bPts = points[`${bout.id}:${bout.fighter_b_id}`];
+
+              const involvesMine = aOwner?.is_mine || bOwner?.is_mine;
+
               return (
-                <div key={bout.id} className={`bg-[#030303] border-2 rounded-xl p-3 ${isMain ? 'border-zinc-600' : 'border-zinc-800'}`}>
+                <div
+                  key={bout.id}
+                  className={`bg-[#030303] border-2 rounded-xl p-3 ${
+                    involvesMine ? 'border-emerald-800/50' : isMain ? 'border-zinc-600' : 'border-zinc-800'
+                  }`}
+                >
                   {/* Tags */}
-                  <div className="flex gap-1.5 mb-2">
-                    {isMain && (
-                      <span className="text-[8px] font-black bg-zinc-800 border border-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                        Main Event
-                      </span>
-                    )}
-                    {isTitle && (
-                      <span className="text-[8px] font-black bg-amber-900/30 border border-amber-800/50 text-amber-400 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                        Title Fight
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex gap-1.5">
+                      {isMain && (
+                        <span className="text-[8px] font-black bg-zinc-800 border border-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded uppercase tracking-widest">
+                          Main Event
+                        </span>
+                      )}
+                      {isTitle && (
+                        <span className="text-[8px] font-black bg-amber-900/30 border border-amber-800/50 text-amber-400 px-1.5 py-0.5 rounded uppercase tracking-widest">
+                          Title Fight
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">
+                      {bout.fighter_a.weight_class}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between">
                     {/* Fighter A */}
-                    <div className={`flex-1 ${aWon ? 'text-white' : bout.status === 'completed' ? 'text-zinc-500' : 'text-white'}`}>
-                      <span className="text-[14px] font-black uppercase tracking-tighter block leading-none">
-                        {bout.fighter_a.name}
-                      </span>
-                      {aOwner && (
-                        <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mt-0.5 block">
-                          {aOwner}
+                    <div className={`flex-1 min-w-0 ${aWon || bout.status !== 'completed' ? 'text-white' : 'text-zinc-500'}`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[14px] font-black uppercase tracking-tighter block leading-none truncate">
+                          {bout.fighter_a.name}
                         </span>
-                      )}
+                        {aWon && <span className="text-[8px] font-black bg-emerald-500 text-black px-1 rounded uppercase flex-shrink-0">W</span>}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {aOwner ? (
+                          <span className={`text-[8px] font-black uppercase tracking-widest truncate ${aOwner.is_mine ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                            {aOwner.is_mine ? 'You' : aOwner.team_name}
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-black uppercase tracking-widest text-zinc-700">Free Agent</span>
+                        )}
+                        {aPts !== undefined && aOwner && (
+                          <span className="text-[8px] font-mono font-black text-emerald-400 tabular-nums flex-shrink-0">+{aPts}</span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Center */}
                     <div className="px-3 text-center flex-shrink-0">
                       {bout.status === 'completed' && (
                         <div className="text-center">
-                          <span className="text-[9px] font-black text-zinc-500 uppercase block tracking-widest">
-                            {bout.method_of_victory}
+                          <span className="text-[9px] font-black text-zinc-400 uppercase block tracking-widest">
+                            {bout.method_of_victory ?? 'DEC'}
                           </span>
                           <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">
-                            R{bout.round_ended}
+                            R{bout.round_ended}{bout.time_ended ? ` ${bout.time_ended}` : ''}
                           </span>
                         </div>
                       )}
@@ -174,15 +240,25 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
                     </div>
 
                     {/* Fighter B */}
-                    <div className={`flex-1 text-right ${bWon ? 'text-white' : bout.status === 'completed' ? 'text-zinc-500' : 'text-white'}`}>
-                      <span className="text-[14px] font-black uppercase tracking-tighter block leading-none">
-                        {bout.fighter_b.name}
-                      </span>
-                      {bOwner && (
-                        <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mt-0.5 block">
-                          {bOwner}
+                    <div className={`flex-1 min-w-0 text-right ${bWon || bout.status !== 'completed' ? 'text-white' : 'text-zinc-500'}`}>
+                      <div className="flex items-center gap-1.5 justify-end">
+                        {bWon && <span className="text-[8px] font-black bg-emerald-500 text-black px-1 rounded uppercase flex-shrink-0">W</span>}
+                        <span className="text-[14px] font-black uppercase tracking-tighter block leading-none truncate">
+                          {bout.fighter_b.name}
                         </span>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 justify-end">
+                        {bPts !== undefined && bOwner && (
+                          <span className="text-[8px] font-mono font-black text-emerald-400 tabular-nums flex-shrink-0">+{bPts}</span>
+                        )}
+                        {bOwner ? (
+                          <span className={`text-[8px] font-black uppercase tracking-widest truncate ${bOwner.is_mine ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                            {bOwner.is_mine ? 'You' : bOwner.team_name}
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-black uppercase tracking-widest text-zinc-700">Free Agent</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

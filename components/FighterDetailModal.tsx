@@ -9,12 +9,18 @@ interface FighterDetailModalProps {
   fighterId: string | null;
   isOpen: boolean;
   onClose: () => void;
+  leagueId?: string;
 }
 
 interface HistoricalBout extends BoutWithFighters {
   event: Event;
   score?: FighterScore;
   is_locked: boolean;
+}
+
+interface OwnerInfo {
+  team_name: string;
+  is_mine: boolean;
 }
 
 function LockIcon() {
@@ -32,9 +38,11 @@ function LockIcon() {
   );
 }
 
-export default function FighterDetailModal({ fighterId, isOpen, onClose }: FighterDetailModalProps) {
+export default function FighterDetailModal({ fighterId, isOpen, onClose, leagueId }: FighterDetailModalProps) {
   const [fighter, setFighter] = useState<Fighter | null>(null);
   const [bouts, setBouts] = useState<HistoricalBout[]>([]);
+  const [owner, setOwner] = useState<OwnerInfo | null>(null);
+  const [leaguePoints, setLeaguePoints] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
@@ -93,8 +101,49 @@ export default function FighterDetailModal({ fighterId, isOpen, onClose }: Fight
         return bDate - aDate;
       });
 
+      // League context: who owns this fighter + how many fantasy points they've generated.
+      let ownerInfo: OwnerInfo | null = null;
+      let totalLeaguePoints: number | null = null;
+      if (leagueId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: memberships } = await supabase
+          .from('league_memberships')
+          .select('id, team_name, user_id')
+          .eq('league_id', leagueId)
+          .eq('claimable', false);
+
+        const membershipIds = (memberships ?? []).map((m: { id: string }) => m.id);
+        if (membershipIds.length > 0) {
+          const { data: rosterRow } = await supabase
+            .from('rosters')
+            .select('membership_id')
+            .eq('fighter_id', fighterId)
+            .in('membership_id', membershipIds)
+            .maybeSingle();
+
+          if (rosterRow) {
+            const m = (memberships ?? []).find((mm: { id: string }) => mm.id === rosterRow.membership_id);
+            ownerInfo = {
+              team_name: m?.team_name ?? 'Unknown',
+              is_mine: !!user && m?.user_id === user.id,
+            };
+          }
+
+          const { data: leagueScores } = await supabase
+            .from('scores')
+            .select('points')
+            .eq('fighter_id', fighterId)
+            .in('membership_id', membershipIds);
+          totalLeaguePoints = (leagueScores ?? []).reduce(
+            (sum: number, s: { points: number }) => sum + s.points, 0
+          );
+        }
+      }
+
       setFighter(f ?? null);
       setBouts(enriched);
+      setOwner(ownerInfo);
+      setLeaguePoints(totalLeaguePoints);
       setLoading(false);
     }
 
@@ -161,6 +210,44 @@ export default function FighterDetailModal({ fighterId, isOpen, onClose }: Fight
               </span>
             </div>
           </div>
+
+          {/* Stat strip */}
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="bg-[#030303] border border-zinc-800 rounded-lg py-2 text-center">
+              <span className="block text-[16px] font-black text-white tabular-nums leading-none">{rankLabel ?? 'NR'}</span>
+              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Rank</span>
+            </div>
+            <div className="bg-[#030303] border border-zinc-800 rounded-lg py-2 text-center">
+              <span className="block text-[16px] font-black text-white tabular-nums leading-none">
+                {fighter.wins}-{fighter.losses}{fighter.draws ? `-${fighter.draws}` : ''}
+              </span>
+              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Record</span>
+            </div>
+            <div className="bg-[#030303] border border-zinc-800 rounded-lg py-2 text-center">
+              <span className="block text-[16px] font-black text-emerald-400 tabular-nums leading-none">
+                {leaguePoints ?? 0}
+              </span>
+              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Fantasy</span>
+            </div>
+          </div>
+
+          {/* Ownership banner */}
+          {leagueId && (
+            <div className={`mt-3 flex items-center justify-between rounded-lg border-2 px-3 py-2 ${
+              owner?.is_mine ? 'border-emerald-700/50 bg-emerald-900/10'
+              : owner ? 'border-zinc-800 bg-[#030303]'
+              : 'border-dashed border-zinc-800 bg-[#030303]'
+            }`}>
+              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                {owner ? 'Owned By' : 'Status'}
+              </span>
+              <span className={`text-[11px] font-black uppercase tracking-tighter ${
+                owner?.is_mine ? 'text-emerald-400' : owner ? 'text-white' : 'text-zinc-500'
+              }`}>
+                {owner ? (owner.is_mine ? 'Your Team' : owner.team_name) : 'Free Agent'}
+              </span>
+            </div>
+          )}
 
           {/* Fight Timeline */}
           <div className="mt-5 space-y-3">

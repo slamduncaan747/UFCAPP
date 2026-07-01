@@ -159,6 +159,7 @@ export default function RosterPage({ params }: RosterPageProps) {
         fighterId={selectedFighterId}
         isOpen={!!selectedFighterId}
         onClose={() => setSelectedFighterId(null)}
+        leagueId={leagueId}
       />
     </>
   );
