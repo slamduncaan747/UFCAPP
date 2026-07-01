@@ -95,7 +95,7 @@ export default function ClaimTeamPage() {
               <button
                 key={m.id}
                 onClick={() => setSelected(m.id)}
-                className={`w-full flex items-center justify-between bg-[#050507] border-2 rounded-xl p-4 active:scale-[0.98] transition-transform text-left ${
+                className={`w-full flex items-center justify-between bg-[#050507] border-2 rounded-xl p-4 hover:border-zinc-600 active:scale-[0.98] transition-all duration-150 text-left ${
                   selected === m.id ? 'border-white' : 'border-zinc-800'
                 }`}
               >
@@ -103,7 +103,11 @@ export default function ClaimTeamPage() {
                   {m.team_name}
                 </span>
                 {selected === m.id && (
-                  <div className="w-5 h-5 rounded-full bg-white border-2 border-zinc-400 flex-shrink-0" />
+                  <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-black" fill="none" stroke="currentColor" strokeWidth={3.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
                 )}
               </button>
             ))
@@ -120,7 +124,7 @@ export default function ClaimTeamPage() {
       <button
         onClick={handleClaim}
         disabled={!selected || claiming}
-        className="w-full bg-white text-black font-black uppercase tracking-widest text-[13px] py-4 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-30 disabled:cursor-not-allowed min-h-[52px]"
+        className="w-full bg-white text-black font-black uppercase tracking-widest text-[13px] py-4 rounded-xl hover:bg-zinc-200 active:scale-[0.98] transition-all duration-150 disabled:opacity-30 disabled:hover:bg-white disabled:cursor-not-allowed min-h-[52px]"
       >
         {claiming ? 'Claiming…' : 'Claim Team'}
       </button>

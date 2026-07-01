@@ -23,7 +23,7 @@ export default function FreeAgentCard({ fighter, nextBoutDate, onAdd, disabled =
   const rank = rankLabel(fighter.official_rank);
 
   return (
-    <div className="bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+    <div className="bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 flex items-center justify-between hover:border-zinc-700 transition-colors duration-150">
       <div className="flex items-center space-x-3">
         <div className="relative w-11 h-11 rounded-full bg-zinc-900 border-[3px] border-zinc-700 flex-shrink-0 overflow-visible">
           {fighter.image_url && (
@@ -57,7 +57,7 @@ export default function FreeAgentCard({ fighter, nextBoutDate, onAdd, disabled =
         onClick={onAdd}
         disabled={disabled}
         aria-label={`Bid to add ${fighter.name}`}
-        className="bg-emerald-600 border border-emerald-500 text-white rounded-lg p-2 active:scale-95 transition-transform flex-shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center disabled:opacity-30 disabled:active:scale-100 disabled:cursor-not-allowed"
+        className="bg-emerald-600 border border-emerald-500 text-white rounded-lg p-2 hover:bg-emerald-500 active:scale-90 transition-all duration-150 flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center disabled:opacity-30 disabled:active:scale-100 disabled:hover:bg-emerald-600 disabled:cursor-not-allowed"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

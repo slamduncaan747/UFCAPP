@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { EventWithBouts, BoutWithFighters, Bout } from '@/lib/types';
 import LiveMatchup from '@/components/LiveMatchup';
 import EventDetailModal from '@/components/EventDetailModal';
+import { CardSkeletonList } from '@/components/Skeleton';
 
 interface FightsPageProps {
   params: Promise<{ id: string }>;
@@ -127,8 +128,8 @@ export default function FightsPage({ params }: FightsPageProps) {
           {title}
         </h2>
         <div className="space-y-4">
-          {evs.map((ev) => (
-            <div key={ev.id}>
+          {evs.map((ev, i) => (
+            <div key={ev.id} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 6) * 50}ms` }}>
               {/* Event header */}
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-[12px] font-black uppercase tracking-tighter text-zinc-400">
@@ -141,7 +142,7 @@ export default function FightsPage({ params }: FightsPageProps) {
                 </span>
               </div>
               <div className="space-y-2">
-                {ev.bouts
+                {[...ev.bouts]
                   .sort((a, b) => (b.is_main_event ? 1 : 0) - (a.is_main_event ? 1 : 0))
                   .map((bout) => (
                     <LiveMatchup
@@ -172,9 +173,7 @@ export default function FightsPage({ params }: FightsPageProps) {
         </h1>
 
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
-          </div>
+          <CardSkeletonList count={5} />
         ) : (
           <>
             {renderSection('Live', liveEvents, 'text-purple-400')}

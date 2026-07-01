@@ -127,7 +127,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
             <button
               onClick={forceProcessWaivers}
               disabled={processing}
-              className="w-full bg-amber-600/20 border-2 border-amber-700/50 text-amber-400 font-black uppercase tracking-widest text-[12px] py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40"
+              className="w-full bg-amber-600/20 border-2 border-amber-700/50 text-amber-400 font-black uppercase tracking-widest text-[12px] py-3 rounded-xl hover:bg-amber-600/30 hover:border-amber-600/60 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:hover:bg-amber-600/20"
             >
               {processing ? 'Processing…' : 'Force Process Waivers'}
             </button>

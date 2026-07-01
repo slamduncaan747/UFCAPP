@@ -10,6 +10,7 @@ import TransferBidCard from '@/components/TransferBidCard';
 import FreeAgentCard from '@/components/FreeAgentCard';
 import TransferFlowModal from '@/components/TransferFlowModal';
 import TransferHistoryModal from '@/components/TransferHistoryModal';
+import { CardSkeletonList } from '@/components/Skeleton';
 
 interface MarketPageProps {
   params: Promise<{ id: string }>;
@@ -169,7 +170,7 @@ export default function MarketPage({ params }: MarketPageProps) {
           <button
             onClick={() => setShowHistory(true)}
             aria-label="Transfer history"
-            className="w-9 h-9 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+            className="w-10 h-10 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center hover:border-zinc-700 hover:text-white active:scale-90 transition-all duration-150"
           >
             <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -205,10 +206,10 @@ export default function MarketPage({ params }: MarketPageProps) {
               <button
                 key={wc}
                 onClick={() => setFilterClass(wc)}
-                className={`flex-shrink-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
+                className={`flex-shrink-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all duration-150 active:scale-95 ${
                   filterClass === wc
                     ? 'bg-white text-black border-white'
-                    : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                    : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-600 hover:text-zinc-200'
                 }`}
               >
                 {wc}
@@ -221,10 +222,10 @@ export default function MarketPage({ params }: MarketPageProps) {
               <button
                 key={mode}
                 onClick={() => setSortMode(mode)}
-                className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded border active:scale-95 transition-all ${
+                className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded border active:scale-95 transition-all duration-150 ${
                   sortMode === mode
                     ? 'bg-zinc-800 text-white border-zinc-700'
-                    : 'text-zinc-600 border-zinc-900'
+                    : 'text-zinc-600 border-zinc-900 hover:text-zinc-400 hover:border-zinc-800'
                 }`}
               >
                 {mode === 'rank' ? 'Rank' : mode === 'schedule' ? 'Schedule' : 'A–Z'}
@@ -234,9 +235,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
-          </div>
+          <CardSkeletonList count={7} className="space-y-2" />
         ) : filtered.length === 0 ? (
           <p className="text-zinc-600 text-[12px] font-black uppercase tracking-widest text-center py-8">
             No free agents in this class
@@ -248,17 +247,22 @@ export default function MarketPage({ params }: MarketPageProps) {
                 Maximum 2 bids active — cancel one to add another
               </p>
             )}
-            {filtered.map((fighter) => (
-              <FreeAgentCard
+            {filtered.map((fighter, i) => (
+              <div
                 key={fighter.id}
-                fighter={fighter}
-                nextBoutDate={boutDateMap[fighter.id] ?? null}
-                disabled={activeBids.length >= 2}
-                onAdd={() => {
-                  if (activeBids.length >= 2) return;
-                  setSelectedAddFighter(fighter);
-                }}
-              />
+                className="animate-fade-up"
+                style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
+              >
+                <FreeAgentCard
+                  fighter={fighter}
+                  nextBoutDate={boutDateMap[fighter.id] ?? null}
+                  disabled={activeBids.length >= 2}
+                  onAdd={() => {
+                    if (activeBids.length >= 2) return;
+                    setSelectedAddFighter(fighter);
+                  }}
+                />
+              </div>
             ))}
           </div>
         )}

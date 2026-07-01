@@ -7,6 +7,7 @@ import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { RosterSlot, FighterScore, SLOT_DISPLAY } from '@/lib/types';
 import { RosterCardWithPoints } from '@/components/RosterCard';
+import { CardSkeletonList } from '@/components/Skeleton';
 import FighterDetailModal from '@/components/FighterDetailModal';
 
 interface RosterPageProps {
@@ -129,21 +130,24 @@ export default function RosterPage({ params }: RosterPageProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
-          </div>
+          <CardSkeletonList count={6} className="space-y-4" />
         ) : (
           <div className="space-y-4">
-            {sorted.map((slot) => (
-              <RosterCardWithPoints
+            {sorted.map((slot, i) => (
+              <div
                 key={slot.id}
-                slot={slot}
-                points={pointsMap[slot.fighter_id] ?? 0}
-                onClick={() => setSelectedFighterId(slot.fighter_id)}
-              />
+                className="animate-fade-up"
+                style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
+              >
+                <RosterCardWithPoints
+                  slot={slot}
+                  points={pointsMap[slot.fighter_id] ?? 0}
+                  onClick={() => setSelectedFighterId(slot.fighter_id)}
+                />
+              </div>
             ))}
             {Array.from({ length: Math.max(0, 9 - sorted.length) }).map((_, i) => (
-              <div key={`empty-${i}`} className="relative bg-[#050507] border-2 border-dashed border-zinc-800 rounded-2xl p-4 h-[88px] flex items-center justify-center">
+              <div key={`empty-${i}`} className="relative bg-[#050507] border-2 border-dashed border-zinc-800 rounded-2xl p-4 min-h-[96px] flex items-center justify-center">
                 <span className="text-[11px] font-black uppercase tracking-widest text-zinc-700">Empty Slot</span>
               </div>
             ))}

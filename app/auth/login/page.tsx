@@ -38,7 +38,7 @@ export default function LoginPage() {
         <button
           onClick={() => signIn('apple')}
           disabled={pending !== null}
-          className="w-full flex items-center justify-center gap-3 bg-white text-black font-black text-[13px] uppercase tracking-widest rounded-xl py-4 active:scale-[0.98] transition-transform min-h-[52px] disabled:opacity-60 disabled:active:scale-100"
+          className="w-full flex items-center justify-center gap-3 bg-white text-black font-black text-[13px] uppercase tracking-widest rounded-xl py-4 hover:bg-zinc-200 active:scale-[0.98] transition-all duration-150 min-h-[52px] disabled:opacity-60 disabled:active:scale-100"
         >
           {pending === 'apple' ? (
             <span className="w-5 h-5 rounded-full border-2 border-black/30 border-t-black animate-spin" />
@@ -53,7 +53,7 @@ export default function LoginPage() {
         <button
           onClick={() => signIn('google')}
           disabled={pending !== null}
-          className="w-full flex items-center justify-center gap-3 bg-zinc-900 border-2 border-zinc-800 text-white font-black text-[13px] uppercase tracking-widest rounded-xl py-4 active:scale-[0.98] transition-transform min-h-[52px] disabled:opacity-60 disabled:active:scale-100"
+          className="w-full flex items-center justify-center gap-3 bg-zinc-900 border-2 border-zinc-800 text-white font-black text-[13px] uppercase tracking-widest rounded-xl py-4 hover:border-zinc-700 active:scale-[0.98] transition-all duration-150 min-h-[52px] disabled:opacity-60 disabled:active:scale-100"
         >
           {pending === 'google' ? (
             <span className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />

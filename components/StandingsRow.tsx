@@ -20,7 +20,7 @@ export default function StandingsRow({ manager, rank, isCurrentUser, onClick }: 
   return (
     <button
       onClick={onClick}
-      className={`w-full bg-[#050507] border-2 rounded-xl p-3 flex items-center justify-between shadow-sm active:scale-[0.98] transition-transform text-left ${
+      className={`w-full bg-[#050507] border-2 rounded-xl p-3 flex items-center justify-between shadow-sm hover:border-zinc-600 active:scale-[0.98] active:brightness-110 transition-all duration-150 text-left ${
         isCurrentUser ? 'border-zinc-600' : 'border-zinc-800'
       }`}
     >

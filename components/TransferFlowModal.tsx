@@ -179,12 +179,12 @@ export default function TransferFlowModal({
                     key={slot.id}
                     onClick={() => !slot.is_locked && setSelectedDrop(slot)}
                     disabled={slot.is_locked}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all active:scale-[0.98] ${
+                    className={`w-full flex items-center justify-between p-3 rounded-xl border-2 transition-all duration-150 active:scale-[0.98] ${
                       slot.is_locked
                         ? 'border-zinc-800 opacity-40 cursor-not-allowed'
                         : isSelected
                         ? 'border-rose-600 bg-rose-900/10'
-                        : 'border-zinc-800 bg-[#050507]'
+                        : 'border-zinc-800 bg-[#050507] hover:border-zinc-700'
                     }`}
                   >
                     <div className="flex items-center space-x-3">
@@ -205,7 +205,11 @@ export default function TransferFlowModal({
                       </div>
                     </div>
                     {isSelected && (
-                      <div className="w-5 h-5 rounded-full bg-rose-600 border-2 border-rose-400 flex-shrink-0" />
+                      <div className="w-5 h-5 rounded-full bg-rose-600 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
                     )}
                   </button>
                 );
@@ -226,7 +230,7 @@ export default function TransferFlowModal({
             <button
               onClick={handleSubmit}
               disabled={!selectedDrop || bothLocked || submitting || existingBidCount >= 2}
-              className="w-full bg-emerald-600 border border-emerald-500 text-white font-black uppercase tracking-widest text-[13px] py-3.5 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full bg-emerald-600 border border-emerald-500 text-white font-black uppercase tracking-widest text-[13px] py-3.5 rounded-xl hover:bg-emerald-500 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:cursor-not-allowed"
             >
               {submitting ? 'Submitting…' : `Submit Priority ${prioritySlot} Bid`}
             </button>

@@ -158,20 +158,20 @@ export default function SeasonChartModal({
           <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
             <button
               onClick={() => setMode('points')}
-              className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${
+              className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all duration-150 ${
                 mode === 'points'
                   ? 'bg-white text-black'
-                  : 'text-zinc-500'
+                  : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
               Points
             </button>
             <button
               onClick={() => setMode('rank')}
-              className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all ${
+              className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all duration-150 ${
                 mode === 'rank'
                   ? 'bg-white text-black'
-                  : 'text-zinc-500'
+                  : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
               Rank

@@ -51,7 +51,7 @@ export default function RosterCard({ slot, onClick }: RosterCardProps) {
   return (
     <button
       onClick={onClick}
-      className="relative w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 flex items-center shadow-lg active:scale-[0.98] transition-transform text-left"
+      className="relative w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 flex items-center shadow-lg hover:border-zinc-700 active:scale-[0.98] active:brightness-110 transition-all duration-150 text-left"
     >
       {/* Hanging weight-class tag */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-4 py-1 rounded-b text-[9px] font-black uppercase tracking-widest text-zinc-300 whitespace-nowrap">
@@ -117,7 +117,7 @@ export function RosterCardWithPoints({ slot, onClick, points }: RosterCardWithPo
   return (
     <button
       onClick={onClick}
-      className="relative w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 flex items-center shadow-lg active:scale-[0.98] transition-transform text-left"
+      className="relative w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 flex items-center shadow-lg hover:border-zinc-700 active:scale-[0.98] active:brightness-110 transition-all duration-150 text-left"
     >
       <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-4 py-1 rounded-b text-[9px] font-black uppercase tracking-widest text-zinc-300 whitespace-nowrap">
         {slot.slot_type}

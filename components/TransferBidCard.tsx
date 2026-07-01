@@ -90,7 +90,7 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
       <button
         onClick={onCancel}
         aria-label={`Cancel bid for ${add.name}`}
-        className="absolute -top-2 -right-2 bg-zinc-900 border-2 border-zinc-700 rounded-lg p-1 text-zinc-400 active:text-white transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center"
+        className="absolute -top-2.5 -right-2.5 bg-zinc-900 border-2 border-zinc-700 rounded-lg p-1 text-zinc-400 hover:text-white hover:border-rose-700 active:scale-90 transition-all duration-150 min-w-[32px] min-h-[32px] flex items-center justify-center"
       >
         <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

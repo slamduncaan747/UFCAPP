@@ -7,6 +7,7 @@ import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { ManagerWithRoster } from '@/lib/types';
 import StandingsRow from '@/components/StandingsRow';
+import { CardSkeletonList } from '@/components/Skeleton';
 import OpponentRosterModal from '@/components/OpponentRosterModal';
 import SeasonChartModal from '@/components/SeasonChartModal';
 
@@ -109,7 +110,7 @@ export default function StandingsPage({ params }: StandingsPageProps) {
           <button
             onClick={() => setShowChart(true)}
             aria-label="Season chart"
-            className="w-9 h-9 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+            className="w-10 h-10 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center hover:border-zinc-700 hover:text-white active:scale-90 transition-all duration-150"
           >
             <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
@@ -118,19 +119,22 @@ export default function StandingsPage({ params }: StandingsPageProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
-          </div>
+          <CardSkeletonList count={6} className="space-y-2" />
         ) : (
           <div className="space-y-2">
             {managers.map((manager, i) => (
-              <StandingsRow
+              <div
                 key={manager.id}
-                manager={manager}
-                rank={i + 1}
-                isCurrentUser={manager.id === currentManagerId}
-                onClick={() => setSelectedManagerId(manager.id)}
-              />
+                className="animate-fade-up"
+                style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}
+              >
+                <StandingsRow
+                  manager={manager}
+                  rank={i + 1}
+                  isCurrentUser={manager.id === currentManagerId}
+                  onClick={() => setSelectedManagerId(manager.id)}
+                />
+              </div>
             ))}
           </div>
         )}

@@ -75,7 +75,7 @@ export default function LeaguesPage() {
             <button
               key={league.id}
               onClick={() => selectLeague(league.id)}
-              className="w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-5 flex items-center justify-between active:scale-[0.98] transition-transform text-left"
+              className="w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-5 flex items-center justify-between hover:border-zinc-700 active:scale-[0.98] active:brightness-110 transition-all duration-150 text-left group"
             >
               <div>
                 <h3 className="text-[18px] font-black uppercase tracking-tighter text-white leading-none">
@@ -85,7 +85,7 @@ export default function LeaguesPage() {
                   Fantasy League
                 </span>
               </div>
-              <svg className="w-5 h-5 text-zinc-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-zinc-600 flex-shrink-0 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-zinc-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>

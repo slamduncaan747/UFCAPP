@@ -124,10 +124,16 @@ export default function BottomNav({ leagueId }: BottomNavProps) {
             key={tab.id}
             href={href}
             aria-current={active ? 'page' : undefined}
-            className={`flex flex-col items-center space-y-1 px-4 min-w-[44px] min-h-[44px] justify-center active:scale-95 transition-all duration-150 ${
-              active ? 'opacity-100' : 'opacity-45'
+            className={`relative flex flex-col items-center gap-1 px-4 min-w-[44px] min-h-[44px] justify-center active:scale-90 transition-all duration-200 ${
+              active ? 'opacity-100' : 'opacity-40 hover:opacity-70'
             }`}
           >
+            {/* Active accent bar */}
+            <span
+              className={`absolute -top-3 h-0.5 rounded-full bg-white transition-all duration-300 ${
+                active ? 'w-6 opacity-100' : 'w-0 opacity-0'
+              }`}
+            />
             {tab.icon(active)}
             <span className="text-[9px] font-black uppercase tracking-widest text-white">
               {tab.label}

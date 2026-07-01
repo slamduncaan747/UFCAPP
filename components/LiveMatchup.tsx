@@ -34,7 +34,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
     return (
       <button
         onClick={onClick}
-        className="w-full bg-[#120a1f] border-2 border-purple-600/50 rounded-xl p-3 shadow-[0_0_20px_rgba(168,85,247,0.1)] relative overflow-hidden active:scale-[0.98] transition-transform text-left"
+        className="w-full bg-[#120a1f] border-2 border-purple-600/50 rounded-xl p-3 shadow-[0_0_20px_rgba(168,85,247,0.1)] relative overflow-hidden hover:border-purple-500/70 active:scale-[0.98] transition-all duration-150 text-left"
       >
         <div className="flex justify-between items-center mb-5 relative z-10">
           <h4 className="text-[11px] font-black uppercase tracking-widest text-purple-300 flex items-center">
@@ -104,7 +104,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
     return (
       <button
         onClick={onClick}
-        className="w-full bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 active:scale-[0.98] transition-transform text-left"
+        className="w-full bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 hover:border-zinc-700 active:scale-[0.98] active:brightness-110 transition-all duration-150 text-left"
       >
         <div className="flex items-center justify-between px-1">
           <div className="flex flex-col items-center w-[38%]">
@@ -157,7 +157,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 active:scale-[0.98] transition-transform text-left"
+      className="w-full bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 hover:border-zinc-700 active:scale-[0.98] active:brightness-110 transition-all duration-150 text-left"
     >
       <div className="flex items-center justify-between px-1">
         <div className="flex flex-col items-center w-[38%]">
