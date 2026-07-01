@@ -21,6 +21,7 @@ export default function FightsPage({ params }: FightsPageProps) {
   const [events, setEvents] = useState<EventWithBouts[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'mine'>('all');
   const supabase = createClient();
 
   const loadData = useCallback(async () => {
@@ -77,8 +78,15 @@ export default function FightsPage({ params }: FightsPageProps) {
   const upcomingEvents = events.filter((e) => e.status === 'upcoming');
   const completedEvents = events.filter((e) => e.status === 'completed');
 
+  const boutIsMine = (b: BoutWithFighters) =>
+    ownership[b.fighter_a_id]?.is_mine || ownership[b.fighter_b_id]?.is_mine;
+
   function renderSection(title: string, evs: EventWithBouts[], colorClass: string) {
-    if (evs.length === 0) return null;
+    // In "mine" mode, keep only events that contain at least one of your bouts.
+    const shown = filter === 'mine'
+      ? evs.filter((ev) => ev.bouts.some(boutIsMine))
+      : evs;
+    if (shown.length === 0) return null;
     return (
       <div className="mb-6">
         <h2 className={`text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2 ${colorClass}`}>
@@ -86,7 +94,8 @@ export default function FightsPage({ params }: FightsPageProps) {
           {title}
         </h2>
         <div className="space-y-4">
-          {evs.map((ev, i) => {
+          {shown.map((ev, i) => {
+            const visibleBouts = filter === 'mine' ? ev.bouts.filter(boutIsMine) : ev.bouts;
             const fighterIds = ev.bouts.flatMap((b) => [b.fighter_a_id, b.fighter_b_id]);
             const rosteredInEvent = fighterIds.filter((fid) => ownership[fid]).length;
             const mineInEvent = fighterIds.filter((fid) => ownership[fid]?.is_mine).length;
@@ -121,7 +130,7 @@ export default function FightsPage({ params }: FightsPageProps) {
                 </div>
               </button>
               <div className="space-y-2">
-                {[...ev.bouts]
+                {[...visibleBouts]
                   .sort((a, b) => (b.is_main_event ? 1 : 0) - (a.is_main_event ? 1 : 0))
                   .map((bout) => (
                     <LiveMatchup
@@ -143,9 +152,25 @@ export default function FightsPage({ params }: FightsPageProps) {
   return (
     <>
       <div className="px-4 pt-6 pb-4">
-        <h1 className="text-2xl font-black uppercase tracking-tighter text-white leading-none mb-6">
-          Fight Card
-        </h1>
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-black uppercase tracking-tighter text-white leading-none">
+            Fight Card
+          </h1>
+          {/* All / Mine segmented control */}
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+            {(['all', 'mine'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded transition-all duration-150 ${
+                  filter === f ? 'bg-white text-black' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {f === 'all' ? 'All' : 'My Fighters'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {loading ? (
           <CardSkeletonList count={5} />
@@ -159,6 +184,12 @@ export default function FightsPage({ params }: FightsPageProps) {
                 No events scheduled
               </p>
             )}
+            {events.length > 0 && filter === 'mine' &&
+              !events.some((e) => e.bouts.some(boutIsMine)) && (
+                <p className="text-zinc-600 text-[12px] font-black uppercase tracking-widest text-center py-16">
+                  None of your fighters are on these cards
+                </p>
+              )}
           </>
         )}
       </div>

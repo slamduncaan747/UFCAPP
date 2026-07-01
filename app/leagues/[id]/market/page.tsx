@@ -55,6 +55,7 @@ export default function MarketPage({ params }: MarketPageProps) {
   const [boutDateMap, setBoutDateMap] = useState<Record<string, string>>({});
   const [filterClass, setFilterClass] = useState<string>('All');
   const [sortMode, setSortMode] = useState<SortMode>('rank');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedAddFighter, setSelectedAddFighter] = useState<Fighter | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -146,8 +147,14 @@ export default function MarketPage({ params }: MarketPageProps) {
     setActiveBids((prev) => prev.filter((b) => b.id !== bidId));
   }
 
+  const query = search.trim().toLowerCase();
   const filtered = freeAgents
     .filter((f) => filterClass === 'All' || f.weight_class === filterClass)
+    .filter((f) =>
+      query === '' ||
+      f.name.toLowerCase().includes(query) ||
+      (f.nickname?.toLowerCase().includes(query) ?? false)
+    )
     .sort((a, b) => {
       if (sortMode === 'alpha') return a.name.localeCompare(b.name);
       if (sortMode === 'schedule') {
@@ -201,6 +208,32 @@ export default function MarketPage({ params }: MarketPageProps) {
         )}
 
         <div className="mb-3">
+          {/* Search */}
+          <div className="relative mb-2">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+            <input
+              type="text"
+              inputMode="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search fighters"
+              className="w-full bg-zinc-900 border-2 border-zinc-800 rounded-xl pl-9 pr-9 py-2.5 text-[13px] font-bold text-white placeholder:text-zinc-600 placeholder:font-black placeholder:uppercase placeholder:tracking-widest placeholder:text-[10px] focus:border-zinc-600 focus:outline-none transition-colors"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white active:scale-90 transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
           <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2">
             {weightClasses.map((wc) => (
               <button
@@ -238,7 +271,7 @@ export default function MarketPage({ params }: MarketPageProps) {
           <CardSkeletonList count={7} className="space-y-2" />
         ) : filtered.length === 0 ? (
           <p className="text-zinc-600 text-[12px] font-black uppercase tracking-widest text-center py-8">
-            No free agents in this class
+            {query ? `No fighters match "${search.trim()}"` : 'No free agents in this class'}
           </p>
         ) : (
           <div className="space-y-2">

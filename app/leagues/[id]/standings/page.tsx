@@ -10,6 +10,7 @@ import StandingsRow from '@/components/StandingsRow';
 import { CardSkeletonList } from '@/components/Skeleton';
 import OpponentRosterModal from '@/components/OpponentRosterModal';
 import SeasonChartModal from '@/components/SeasonChartModal';
+import ActivityModal from '@/components/ActivityModal';
 
 interface StandingsPageProps {
   params: Promise<{ id: string }>;
@@ -22,6 +23,7 @@ export default function StandingsPage({ params }: StandingsPageProps) {
   const [loading, setLoading] = useState(true);
   const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
   const [showChart, setShowChart] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -107,15 +109,26 @@ export default function StandingsPage({ params }: StandingsPageProps) {
       <div className="px-4 pt-6 pb-4">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-black uppercase tracking-tighter text-white leading-none">Standings</h1>
-          <button
-            onClick={() => setShowChart(true)}
-            aria-label="Season chart"
-            className="w-10 h-10 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center hover:border-zinc-700 hover:text-white active:scale-90 transition-all duration-150"
-          >
-            <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowActivity(true)}
+              aria-label="League activity"
+              className="w-10 h-10 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center hover:border-zinc-700 hover:text-white active:scale-90 transition-all duration-150"
+            >
+              <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a8 8 0 0114-4m2 10a8 8 0 01-14 4" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowChart(true)}
+              aria-label="Season chart"
+              className="w-10 h-10 bg-zinc-900 border-2 border-zinc-800 rounded-xl flex items-center justify-center hover:border-zinc-700 hover:text-white active:scale-90 transition-all duration-150"
+            >
+              <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -151,6 +164,12 @@ export default function StandingsPage({ params }: StandingsPageProps) {
         onClose={() => setShowChart(false)}
         managers={managers}
         snapshots={[]}
+      />
+
+      <ActivityModal
+        leagueId={leagueId}
+        isOpen={showActivity}
+        onClose={() => setShowActivity(false)}
       />
     </>
   );

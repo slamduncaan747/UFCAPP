@@ -19,6 +19,8 @@ export default function RosterPage({ params }: RosterPageProps) {
   const [slots, setSlots] = useState<RosterSlot[]>([]);
   const [pointsMap, setPointsMap] = useState<Record<string, number>>({});
   const [totalPoints, setTotalPoints] = useState(0);
+  const [leagueRank, setLeagueRank] = useState<number | null>(null);
+  const [leagueSize, setLeagueSize] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [leagueName, setLeagueName] = useState('');
   const [selectedFighterId, setSelectedFighterId] = useState<string | null>(null);
@@ -97,10 +99,42 @@ export default function RosterPage({ params }: RosterPageProps) {
       setPointsMap(pMap);
       setTotalPoints(total);
       setLoading(false);
+
+      // League rank: total points per team across the league.
+      const { data: leagueMemberships } = await supabase
+        .from('league_memberships')
+        .select('id')
+        .eq('league_id', leagueId)
+        .eq('claimable', false);
+
+      const allIds = (leagueMemberships ?? []).map((m: { id: string }) => m.id);
+      if (allIds.length > 0) {
+        const { data: allScores } = await supabase
+          .from('scores')
+          .select('membership_id, points')
+          .in('membership_id', allIds);
+
+        const totals: Record<string, number> = {};
+        allIds.forEach((id) => { totals[id] = 0; });
+        (allScores ?? []).forEach((s: { membership_id: string; points: number }) => {
+          totals[s.membership_id] = (totals[s.membership_id] ?? 0) + s.points;
+        });
+
+        const ranked = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+        const myPos = ranked.findIndex(([id]) => id === membershipId);
+        setLeagueRank(myPos >= 0 ? myPos + 1 : null);
+        setLeagueSize(allIds.length);
+      }
     }
 
     load();
   }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function ordinal(n: number): string {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
 
   const SLOT_ORDER = [
     'Flyweight', 'Bantamweight', 'Featherweight',
@@ -120,6 +154,20 @@ export default function RosterPage({ params }: RosterPageProps) {
             <h1 className="text-2xl font-black uppercase tracking-tighter text-white leading-none mt-0.5">
               My Roster
             </h1>
+            {leagueRank !== null && leagueSize !== null && (
+              <div className="flex items-center gap-1.5 mt-2">
+                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
+                  leagueRank === 1 ? 'bg-amber-500 text-black'
+                  : leagueRank <= 3 ? 'bg-zinc-700 text-white'
+                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400'
+                }`}>
+                  {ordinal(leagueRank)} Place
+                </span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">
+                  of {leagueSize}
+                </span>
+              </div>
+            )}
           </div>
           <div className="text-right border-l-2 border-zinc-800 pl-4">
             <span className="block text-[28px] font-black text-white tracking-tighter leading-none font-mono tabular-nums">
