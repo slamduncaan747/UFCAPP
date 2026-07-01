@@ -83,17 +83,44 @@ export default function SlideUpModal({
     return () => clearTimeout(t);
   }, [isOpen, render]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Lock body scroll + close on Escape while open.
+  // Lock background scroll + close on Escape while open.
+  //
+  // This app doesn't scroll on <body> — each screen scrolls inside its own
+  // `.scroll-area` container — so locking body alone lets the page behind the
+  // sheet keep scrolling (iOS PWA also ignores overscroll-behavior). We freeze
+  // every scroll container instead, preserving its position.
   useEffect(() => {
     if (!isOpen) return;
-    const prev = document.body.style.overflow;
+
+    const scrollers = Array.from(
+      document.querySelectorAll<HTMLElement>('.scroll-area')
+    );
+    const restore = scrollers.map((el) => ({
+      el,
+      overflow: el.style.overflow,
+      touchAction: el.style.touchAction,
+      scrollTop: el.scrollTop,
+    }));
+    scrollers.forEach((el) => {
+      el.style.overflow = 'hidden';
+      el.style.touchAction = 'none';
+    });
+
+    const prevBody = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
+
     return () => {
-      document.body.style.overflow = prev;
+      restore.forEach(({ el, overflow, touchAction, scrollTop }) => {
+        el.style.overflow = overflow;
+        el.style.touchAction = touchAction;
+        el.scrollTop = scrollTop; // restore the reader to where they were
+      });
+      document.body.style.overflow = prevBody;
       window.removeEventListener('keydown', onKey);
     };
   }, [isOpen, onClose]);
