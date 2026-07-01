@@ -6,6 +6,7 @@ interface FreeAgentCardProps {
   fighter: Fighter;
   nextBoutDate?: string | null;
   onAdd: () => void;
+  onInfo?: () => void;
   disabled?: boolean;
 }
 
@@ -19,12 +20,16 @@ function formatDate(dateStr: string | null | undefined): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function FreeAgentCard({ fighter, nextBoutDate, onAdd, disabled = false }: FreeAgentCardProps) {
+export default function FreeAgentCard({ fighter, nextBoutDate, onAdd, onInfo, disabled = false }: FreeAgentCardProps) {
   const rank = rankLabel(fighter.official_rank);
 
   return (
     <div className="bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 flex items-center justify-between hover:border-zinc-700 transition-colors duration-150">
-      <div className="flex items-center space-x-3">
+      <button
+        onClick={onInfo}
+        disabled={!onInfo}
+        className="flex items-center space-x-3 min-w-0 flex-1 text-left active:scale-[0.98] transition-transform disabled:active:scale-100"
+      >
         <div className="relative w-11 h-11 rounded-full bg-zinc-900 border-[3px] border-zinc-700 flex-shrink-0 overflow-visible">
           {fighter.image_url && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -36,8 +41,8 @@ export default function FreeAgentCard({ fighter, nextBoutDate, onAdd, disabled =
             </span>
           )}
         </div>
-        <div>
-          <h4 className="text-[14px] font-black uppercase tracking-tighter text-white leading-none">
+        <div className="min-w-0">
+          <h4 className="text-[14px] font-black uppercase tracking-tighter text-white leading-none truncate">
             {fighter.name}
           </h4>
           <div className="flex items-center gap-2 mt-1">
@@ -51,7 +56,7 @@ export default function FreeAgentCard({ fighter, nextBoutDate, onAdd, disabled =
             )}
           </div>
         </div>
-      </div>
+      </button>
 
       <button
         onClick={onAdd}

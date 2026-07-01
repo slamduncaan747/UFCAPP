@@ -10,6 +10,7 @@ import LiveMatchup from '@/components/LiveMatchup';
 import EventDetailModal from '@/components/EventDetailModal';
 import { CardSkeletonList } from '@/components/Skeleton';
 import { useOwnership } from '@/lib/useOwnership';
+import { ownerFor } from '@/lib/ownership';
 
 interface FightsPageProps {
   params: Promise<{ id: string }>;
@@ -37,7 +38,7 @@ export default function FightsPage({ params }: FightsPageProps) {
         )
       `)
       .order('event_date', { ascending: false })
-      .limit(10);
+      .limit(30);
 
     const enrichedEvents: EventWithBouts[] = (eventsData ?? []).map((ev) => ({
       ...ev,
@@ -79,7 +80,7 @@ export default function FightsPage({ params }: FightsPageProps) {
   const completedEvents = events.filter((e) => e.status === 'completed');
 
   const boutIsMine = (b: BoutWithFighters) =>
-    ownership[b.fighter_a_id]?.is_mine || ownership[b.fighter_b_id]?.is_mine;
+    ownerFor(ownership, b.fighter_a)?.is_mine || ownerFor(ownership, b.fighter_b)?.is_mine;
 
   function renderSection(title: string, evs: EventWithBouts[], colorClass: string) {
     // In "mine" mode, keep only events that contain at least one of your bouts.
@@ -96,9 +97,9 @@ export default function FightsPage({ params }: FightsPageProps) {
         <div className="space-y-4">
           {shown.map((ev, i) => {
             const visibleBouts = filter === 'mine' ? ev.bouts.filter(boutIsMine) : ev.bouts;
-            const fighterIds = ev.bouts.flatMap((b) => [b.fighter_a_id, b.fighter_b_id]);
-            const rosteredInEvent = fighterIds.filter((fid) => ownership[fid]).length;
-            const mineInEvent = fighterIds.filter((fid) => ownership[fid]?.is_mine).length;
+            const evFighters = ev.bouts.flatMap((b) => [b.fighter_a, b.fighter_b]);
+            const rosteredInEvent = evFighters.filter((f) => ownerFor(ownership, f)).length;
+            const mineInEvent = evFighters.filter((f) => ownerFor(ownership, f)?.is_mine).length;
             return (
             <div key={ev.id} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 6) * 50}ms` }}>
               {/* Event header */}

@@ -167,9 +167,9 @@ export default function FighterDetailModal({ fighterId, isOpen, onClose, leagueI
             </div>
           </div>
 
-          {/* Lock indicator (top right) — only when a bout is actually locked */}
+          {/* Lock indicator (top left) — only when a bout is actually locked */}
           {bouts.some((b) => b.is_locked && b.status !== 'completed') && (
-            <div className="absolute top-5 right-5">
+            <div className="absolute top-4 left-4">
               <LockIcon />
             </div>
           )}
@@ -286,9 +286,13 @@ export default function FighterDetailModal({ fighterId, isOpen, onClose, leagueI
                     </div>
 
                     <div className="text-right flex-shrink-0 ml-2">
-                      {isCompleted && score && (
+                      {isCompleted && (
                         <>
-                          <span className="text-sm font-mono font-black text-emerald-400 tabular-nums">+{score.points} PTS</span>
+                          {score ? (
+                            <span className="text-sm font-mono font-black text-emerald-400 tabular-nums">+{score.points} PTS</span>
+                          ) : (
+                            <span className="text-[8px] font-black text-amber-500/80 uppercase tracking-widest block">Scoring Pending</span>
+                          )}
                           <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase block mt-1 tracking-widest text-center ${isWin ? 'bg-emerald-500 text-black' : isLoss ? 'bg-rose-600 text-white' : 'bg-zinc-700 text-zinc-300'}`}>
                             {isWin ? `WIN ${bout.method_of_victory ?? ''} R${bout.round_ended ?? ''}` : isLoss ? `LOSS ${bout.method_of_victory ?? ''} R${bout.round_ended ?? ''}` : 'DRAW'}
                           </span>

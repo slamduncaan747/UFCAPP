@@ -11,6 +11,7 @@ import FreeAgentCard from '@/components/FreeAgentCard';
 import TransferFlowModal from '@/components/TransferFlowModal';
 import TransferHistoryModal from '@/components/TransferHistoryModal';
 import { CardSkeletonList } from '@/components/Skeleton';
+import FighterDetailModal from '@/components/FighterDetailModal';
 
 interface MarketPageProps {
   params: Promise<{ id: string }>;
@@ -58,6 +59,7 @@ export default function MarketPage({ params }: MarketPageProps) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedAddFighter, setSelectedAddFighter] = useState<Fighter | null>(null);
+  const [infoFighterId, setInfoFighterId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const supabase = createClient();
 
@@ -290,6 +292,7 @@ export default function MarketPage({ params }: MarketPageProps) {
                   fighter={fighter}
                   nextBoutDate={boutDateMap[fighter.id] ?? null}
                   disabled={activeBids.length >= 2}
+                  onInfo={() => setInfoFighterId(fighter.id)}
                   onAdd={() => {
                     if (activeBids.length >= 2) return;
                     setSelectedAddFighter(fighter);
@@ -314,6 +317,13 @@ export default function MarketPage({ params }: MarketPageProps) {
         leagueId={leagueId}
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
+      />
+
+      <FighterDetailModal
+        fighterId={infoFighterId}
+        isOpen={!!infoFighterId}
+        onClose={() => setInfoFighterId(null)}
+        leagueId={leagueId}
       />
     </>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { BoutWithFighters, OwnershipMap, Fighter } from '@/lib/types';
+import { ownerFor } from '@/lib/ownership';
 
 interface LiveMatchupProps {
   bout: BoutWithFighters;
@@ -47,8 +48,8 @@ export default function LiveMatchup({ bout, ownership = {}, onClick }: LiveMatch
   const aRank = rankLabel(fighter_a.official_rank);
   const bRank = rankLabel(fighter_b.official_rank);
 
-  const aOwner = ownership[fighter_a.id];
-  const bOwner = ownership[fighter_b.id];
+  const aOwner = ownerFor(ownership, fighter_a);
+  const bOwner = ownerFor(ownership, fighter_b);
   const rosteredCount = [aOwner, bOwner].filter(Boolean).length;
 
   // For completed bouts

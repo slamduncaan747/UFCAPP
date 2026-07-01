@@ -24,6 +24,7 @@ export default function StandingsPage({ params }: StandingsPageProps) {
   const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
   const [showChart, setShowChart] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [snapshots, setSnapshots] = useState<{ eventTitle: string; managerPoints: Record<string, number> }[]>([]);
   const supabase = createClient();
 
   useEffect(() => {
@@ -99,6 +100,40 @@ export default function StandingsPage({ params }: StandingsPageProps) {
 
       setManagers(enriched);
       setLoading(false);
+
+      // Build season snapshots: cumulative points per team after each completed event.
+      const membershipIds = (memberships ?? []).map((m: { id: string }) => m.id);
+      if (membershipIds.length > 0) {
+        const { data: scored } = await supabase
+          .from('scores')
+          .select('membership_id, points, bout:bouts(event:events(id, title, event_date, status))')
+          .in('membership_id', membershipIds);
+
+        // Points earned per event per membership.
+        type Ev = { id: string; title: string; event_date: string; status: string };
+        const perEvent: Record<string, { ev: Ev; pts: Record<string, number> }> = {};
+        (scored ?? []).forEach((row: { membership_id: string; points: number; bout: { event: Ev | Ev[] | null } | { event: Ev | Ev[] | null }[] | null }) => {
+          const bout = Array.isArray(row.bout) ? row.bout[0] : row.bout;
+          const ev = bout && (Array.isArray(bout.event) ? bout.event[0] : bout.event);
+          if (!ev || ev.status !== 'completed') return;
+          if (!perEvent[ev.id]) perEvent[ev.id] = { ev, pts: {} };
+          perEvent[ev.id].pts[row.membership_id] = (perEvent[ev.id].pts[row.membership_id] ?? 0) + row.points;
+        });
+
+        const orderedEvents = Object.values(perEvent).sort(
+          (a, b) => new Date(a.ev.event_date).getTime() - new Date(b.ev.event_date).getTime()
+        );
+
+        const cumulative: Record<string, number> = {};
+        membershipIds.forEach((id) => { cumulative[id] = 0; });
+        const snaps = orderedEvents.map(({ ev, pts }) => {
+          Object.entries(pts).forEach(([mid, p]) => {
+            cumulative[mid] = (cumulative[mid] ?? 0) + p;
+          });
+          return { eventTitle: ev.title, managerPoints: { ...cumulative } };
+        });
+        setSnapshots(snaps);
+      }
     }
 
     load();
@@ -163,7 +198,7 @@ export default function StandingsPage({ params }: StandingsPageProps) {
         isOpen={showChart}
         onClose={() => setShowChart(false)}
         managers={managers}
-        snapshots={[]}
+        snapshots={snapshots}
       />
 
       <ActivityModal

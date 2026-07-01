@@ -167,9 +167,18 @@ export default function SlideUpModal({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Drag handle — always grabbable */}
-        <div className="flex-shrink-0 flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing">
+        {/* Drag handle — always grabbable, with an always-visible close button */}
+        <div className="flex-shrink-0 relative flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing">
           <div className="w-10 h-1.5 bg-zinc-700 rounded-full" />
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute -top-0.5 right-3 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-zinc-900/90 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 active:scale-90 transition-all duration-150"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         {/* Scrollable content */}

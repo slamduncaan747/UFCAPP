@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { BoutWithFighters, Event, OwnershipMap } from '@/lib/types';
+import { addOwner, ownerFor } from '@/lib/ownership';
 import SlideUpModal from './SlideUpModal';
 
 interface EventDetailModalProps {
@@ -37,12 +38,12 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
 
       const boutList = (boutsData as BoutWithFighters[]) ?? [];
 
-      // Ownership across the whole league.
+      // Ownership across the whole league. NOTE: do NOT filter by `claimable` —
+      // unclaimed teams still hold rosters and must show as owners.
       const { data: memberships } = await supabase
         .from('league_memberships')
         .select('id, team_name, user_id')
-        .eq('league_id', leagueId)
-        .eq('claimable', false);
+        .eq('league_id', leagueId);
 
       const myMembership = (memberships ?? []).find(
         (m: { user_id: string | null }) => user && m.user_id === user.id
@@ -59,15 +60,16 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
 
         const { data: rosters } = await supabase
           .from('rosters')
-          .select('fighter_id, membership_id')
+          .select('fighter_id, membership_id, fighter:fighters(name)')
           .in('membership_id', membershipIds);
 
-        (rosters ?? []).forEach((r: { fighter_id: string; membership_id: string }) => {
-          ownerMap[r.fighter_id] = {
+        (rosters ?? []).forEach((r: { fighter_id: string; membership_id: string; fighter: { name: string } | { name: string }[] | null }) => {
+          const rf = Array.isArray(r.fighter) ? r.fighter[0] : r.fighter;
+          addOwner(ownerMap, r.fighter_id, rf?.name, {
             membership_id: r.membership_id,
             team_name: nameById[r.membership_id] ?? 'Unknown',
             is_mine: r.membership_id === myMembership?.id,
-          };
+          });
         });
       }
 
@@ -100,9 +102,9 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
     ? 'text-zinc-500'
     : 'text-blue-300';
 
-  const fighterIds = bouts.flatMap((b) => [b.fighter_a_id, b.fighter_b_id]);
-  const rosteredCount = fighterIds.filter((fid) => ownership[fid]).length;
-  const mineCount = fighterIds.filter((fid) => ownership[fid]?.is_mine).length;
+  const allFighters = bouts.flatMap((b) => [b.fighter_a, b.fighter_b]);
+  const rosteredCount = allFighters.filter((f) => ownerFor(ownership, f)).length;
+  const mineCount = allFighters.filter((f) => ownerFor(ownership, f)?.is_mine).length;
 
   return (
     <SlideUpModal isOpen={isOpen} onClose={onClose}>
@@ -155,8 +157,8 @@ export default function EventDetailModal({ eventId, leagueId, isOpen, onClose }:
           {/* Bout list */}
           <div className="space-y-3">
             {bouts.map((bout) => {
-              const aOwner = ownership[bout.fighter_a_id];
-              const bOwner = ownership[bout.fighter_b_id];
+              const aOwner = ownerFor(ownership, bout.fighter_a);
+              const bOwner = ownerFor(ownership, bout.fighter_b);
               const isMain = bout.is_main_event;
               const isTitle = bout.is_title_fight;
 

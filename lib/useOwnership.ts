@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { OwnershipMap } from '@/lib/types';
+import { addOwner } from '@/lib/ownership';
 
 /**
  * Builds a league-wide map of fighter_id → owning team for the given league,
@@ -39,15 +40,16 @@ export function useOwnership(leagueId: string) {
 
       const { data: rosters } = await supabase
         .from('rosters')
-        .select('fighter_id, membership_id')
+        .select('fighter_id, membership_id, fighter:fighters(name)')
         .in('membership_id', membershipIds);
 
-      (rosters ?? []).forEach((r: { fighter_id: string; membership_id: string }) => {
-        map[r.fighter_id] = {
+      (rosters ?? []).forEach((r: { fighter_id: string; membership_id: string; fighter: { name: string } | { name: string }[] | null }) => {
+        const fighter = Array.isArray(r.fighter) ? r.fighter[0] : r.fighter;
+        addOwner(map, r.fighter_id, fighter?.name, {
           membership_id: r.membership_id,
           team_name: nameById[r.membership_id] ?? 'Unknown',
           is_mine: r.membership_id === mineId,
-        };
+        });
       });
     }
 
