@@ -125,7 +125,7 @@ export default function TransferFlowModal({
   );
 
   return (
-    <SlideUpModal isOpen={isOpen} onClose={onClose} heightClass="h-[70vh]">
+    <SlideUpModal isOpen={isOpen} onClose={onClose} heightClass="h-[70dvh]">
       <div className="px-5 pb-8">
         <div className="flex justify-center -mt-2 mb-5">
           <div className="bg-zinc-900 border-x border-b border-zinc-700 px-5 py-1.5 rounded-b-lg text-[10px] font-black uppercase tracking-widest text-zinc-300 shadow-md">

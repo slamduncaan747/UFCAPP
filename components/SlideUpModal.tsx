@@ -25,7 +25,7 @@ export default function SlideUpModal({
   isOpen,
   onClose,
   children,
-  heightClass = 'h-[80vh]',
+  heightClass = 'h-[80dvh]',
 }: SlideUpModalProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -182,7 +182,7 @@ export default function SlideUpModal({
         </div>
 
         {/* Scrollable content */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar overscroll-contain">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar overscroll-contain pb-[env(safe-area-inset-bottom)]">
           {children}
         </div>
       </div>

@@ -33,6 +33,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
   const [league, setLeague] = useState<League | null>(null);
   const [isCommissioner, setIsCommissioner] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [scoring, setScoring] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const supabase = createClient();
@@ -69,6 +70,21 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       setTimeout(() => setErrorMsg(''), 5000);
     } else {
       setSuccessMsg('Waivers processed successfully.');
+      setTimeout(() => setSuccessMsg(''), 4000);
+    }
+  }
+
+  async function processScores() {
+    setScoring(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    const { data, error } = await supabase.rpc('process_scores', { p_league_id: leagueId });
+    setScoring(false);
+    if (error) {
+      setErrorMsg(error.message);
+      setTimeout(() => setErrorMsg(''), 6000);
+    } else {
+      setSuccessMsg(`Scores updated — ${data ?? 0} results processed.`);
       setTimeout(() => setSuccessMsg(''), 4000);
     }
   }
@@ -124,6 +140,13 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 {errorMsg}
               </p>
             )}
+            <button
+              onClick={processScores}
+              disabled={scoring}
+              className="w-full bg-emerald-600/20 border-2 border-emerald-700/50 text-emerald-400 font-black uppercase tracking-widest text-[12px] py-3 rounded-xl hover:bg-emerald-600/30 hover:border-emerald-600/60 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:hover:bg-emerald-600/20"
+            >
+              {scoring ? 'Scoring…' : 'Recompute Fight Scores'}
+            </button>
             <button
               onClick={forceProcessWaivers}
               disabled={processing}

@@ -149,7 +149,7 @@ export default function SeasonChartModal({
   ];
 
   return (
-    <SlideUpModal isOpen={isOpen} onClose={onClose} heightClass="h-[85vh]">
+    <SlideUpModal isOpen={isOpen} onClose={onClose} heightClass="h-[85dvh]">
       <div className="px-5 pb-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
