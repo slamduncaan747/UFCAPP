@@ -3,8 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: 'ufc.com' },
-      { protocol: 'https', hostname: '*.ufc.com' },
+      { protocol: 'https', hostname: 'www.ufc.com' },
       { protocol: 'https', hostname: 'dmxg5wxfqgb4u.cloudfront.net' },
       { protocol: 'https', hostname: 'upload.wikimedia.org' },
     ],
