@@ -1,6 +1,7 @@
 'use client';
 
 import { WaiverBidWithFighters } from '@/lib/types';
+import { FighterAvatar } from '@/components/FighterAvatar';
 
 interface TransferBidCardProps {
   bid: WaiverBidWithFighters;
@@ -21,21 +22,17 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
 
   return (
     <div className="relative bg-zinc-900/40 border-2 border-zinc-800/80 rounded-2xl p-4 pt-6 flex flex-col shadow-sm mt-6">
-      {/* Hanging priority tag */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-4 py-0.5 rounded-b text-[9px] font-black uppercase tracking-widest text-white whitespace-nowrap">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-4 py-0.5 rounded-b text-[10px] font-black uppercase tracking-widest text-white whitespace-nowrap">
         Priority {prioritySlot} • {drop.weight_class}
       </div>
 
       <div className="flex items-center justify-between w-full mt-2">
         {/* DROP side */}
         <div className="flex items-center space-x-3 w-[35%]">
-          <div className="relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] border-rose-900/80 flex-shrink-0 overflow-visible">
-            {drop.image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={drop.image_url} alt={drop.name} className="w-full h-full rounded-full object-cover" />
-            )}
+          <div className="relative flex-shrink-0">
+            <FighterAvatar fighter={drop} size={48} className="border-[3px] border-rose-900/80" />
             {dropRank && (
-              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-zinc-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-zinc-400 text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                 {dropRank}
               </span>
             )}
@@ -44,7 +41,7 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
             <h4 className="text-[12px] font-black uppercase text-zinc-300 truncate leading-none mb-1">
               {drop.name.split(' ').pop()}
             </h4>
-            <span className="text-[9px] font-bold text-zinc-500 tracking-widest">
+            <span className="text-[10px] font-bold text-zinc-500 tracking-widest">
               {drop.wins}-{drop.losses}-{drop.draws}
             </span>
           </div>
@@ -68,17 +65,14 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
             <h4 className="text-[12px] font-black uppercase text-white truncate leading-none mb-1">
               {add.name.split(' ').pop()}
             </h4>
-            <span className="text-[9px] font-bold text-zinc-500 tracking-widest">
+            <span className="text-[10px] font-bold text-zinc-500 tracking-widest">
               {add.wins}-{add.losses}-{add.draws}
             </span>
           </div>
-          <div className="relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] border-emerald-500/80 flex-shrink-0 overflow-visible">
-            {add.image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={add.image_url} alt={add.name} className="w-full h-full rounded-full object-cover" />
-            )}
+          <div className="relative flex-shrink-0">
+            <FighterAvatar fighter={add} size={48} className="border-[3px] border-emerald-500/80" />
             {addRank && (
-              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                 {addRank}
               </span>
             )}
@@ -86,13 +80,13 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
         </div>
       </div>
 
-      {/* Cancel button */}
+      {/* Cancel button — 40px touch target */}
       <button
         onClick={onCancel}
         aria-label={`Cancel bid for ${add.name}`}
-        className="absolute -top-2 -right-2 bg-zinc-900 border-2 border-zinc-700 rounded-lg p-1 text-zinc-400 active:text-white transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center"
+        className="absolute -top-3 -right-3 bg-zinc-900 border-2 border-zinc-700 rounded-lg text-zinc-400 active:text-white transition-colors w-10 h-10 flex items-center justify-center"
       >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>

@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { RosterSlot, SLOT_DISPLAY } from '@/lib/types';
 import SlideUpModal from './SlideUpModal';
+import { FighterAvatar } from '@/components/FighterAvatar';
 
 interface OpponentRosterModalProps {
-  managerId: string | null;  // membership id
+  managerId: string | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -22,40 +23,45 @@ export default function OpponentRosterModal({ managerId, isOpen, onClose }: Oppo
     setLoading(true);
 
     async function load() {
-      const { data: membership } = await supabase
-        .from('league_memberships')
-        .select('team_name')
-        .eq('id', managerId)
-        .single();
+      const [{ data: membership }, { data: rostersData }] = await Promise.all([
+        supabase.from('league_memberships').select('team_name').eq('id', managerId).single(),
+        supabase.from('rosters').select('*, fighter:fighters(*)').eq('membership_id', managerId),
+      ]);
 
-      const { data: rostersData } = await supabase
-        .from('rosters')
-        .select('*, fighter:fighters(*)')
-        .eq('membership_id', managerId);
+      const fighterIds = (rostersData ?? []).map((r) => r.fighter_id);
+
+      type BoutRow = { id: string; fighter_a_id: string; fighter_b_id: string; event?: { event_date: string; status?: string; title?: string } | null };
+      let allBouts: BoutRow[] = [];
+      if (fighterIds.length > 0) {
+        const { data } = await supabase
+          .from('bouts')
+          .select('*, event:events(*)')
+          .or(fighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','))
+          .order('created_at', { ascending: false });
+        allBouts = (data ?? []) as BoutRow[];
+      }
+
+      // Pick most recent bout per fighter
+      const boutByFighter = new Map<string, BoutRow>();
+      for (const bout of allBouts) {
+        for (const fid of [bout.fighter_a_id, bout.fighter_b_id]) {
+          if (fighterIds.includes(fid) && !boutByFighter.has(fid)) {
+            boutByFighter.set(fid, bout);
+          }
+        }
+      }
 
       const now = new Date();
-      const enriched: RosterSlot[] = await Promise.all(
-        (rostersData ?? []).map(async (r) => {
-          const { data: boutData } = await supabase
-            .from('bouts')
-            .select('*, event:events(*)')
-            .or(`fighter_a_id.eq.${r.fighter_id},fighter_b_id.eq.${r.fighter_id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-
-          const eventStart = boutData?.event?.event_date
-            ? new Date(boutData.event.event_date)
-            : null;
-
-          return {
-            ...r,
-            slot_type: SLOT_DISPLAY[r.slot] ?? r.slot,
-            next_bout: boutData ?? null,
-            is_locked: !!eventStart && eventStart <= now,
-          } as RosterSlot;
-        })
-      );
+      const enriched: RosterSlot[] = (rostersData ?? []).map((r) => {
+        const boutData = boutByFighter.get(r.fighter_id) ?? null;
+        const eventStart = boutData?.event?.event_date ? new Date(boutData.event.event_date) : null;
+        return {
+          ...r,
+          slot_type: SLOT_DISPLAY[r.slot] ?? r.slot,
+          next_bout: boutData ?? null,
+          is_locked: !!eventStart && eventStart <= now,
+        } as RosterSlot;
+      });
 
       setTeamName(membership?.team_name ?? 'Roster');
       setSlots(enriched);
@@ -89,17 +95,14 @@ export default function OpponentRosterModal({ managerId, isOpen, onClose }: Oppo
               const rank = rankLabel(slot.fighter.official_rank);
               return (
                 <div key={slot.id} className="relative bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 flex items-center">
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-3 py-0.5 rounded-b text-[9px] font-black uppercase tracking-widest text-zinc-400 whitespace-nowrap">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-3 py-0.5 rounded-b text-[10px] font-black uppercase tracking-widest text-zinc-400 whitespace-nowrap">
                     {slot.slot_type}
                   </div>
                   <div className="flex items-center space-x-4 mt-3 flex-1 min-w-0">
-                    <div className="relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] border-zinc-700 flex-shrink-0 overflow-visible">
-                      {slot.fighter.image_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={slot.fighter.image_url} alt={slot.fighter.name} className="w-full h-full rounded-full object-cover" />
-                      )}
+                    <div className="relative flex-shrink-0">
+                      <FighterAvatar fighter={slot.fighter} size={48} className="border-[3px] border-zinc-700" />
                       {rank && (
-                        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                           {rank}
                         </span>
                       )}
@@ -108,7 +111,7 @@ export default function OpponentRosterModal({ managerId, isOpen, onClose }: Oppo
                       <h4 className="text-[14px] font-black uppercase tracking-tighter text-white leading-none">
                         {slot.fighter.name}
                       </h4>
-                      <span className="text-[9px] font-bold text-zinc-500 tracking-widest">
+                      <span className="text-[10px] font-bold text-zinc-500 tracking-widest">
                         {slot.fighter.wins}-{slot.fighter.losses}-{slot.fighter.draws}
                       </span>
                     </div>

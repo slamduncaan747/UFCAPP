@@ -45,7 +45,7 @@ export default function SlideUpModal({
     isDragging.current = false;
     if (!sheetRef.current) return;
     const delta = currentY.current - startY.current;
-    if (delta > 120) {
+    if (delta > 60) {
       onClose();
     } else {
       sheetRef.current.style.transition = SNAP_TRANSITION;

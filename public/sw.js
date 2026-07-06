@@ -19,6 +19,20 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Cache-first for Next.js optimized images
+  if (event.request.url.includes('/_next/image')) {
+    event.respondWith(
+      caches.open('ufc-images-v1').then(async (cache) => {
+        const cached = await cache.match(event.request);
+        if (cached) return cached;
+        const response = await fetch(event.request);
+        if (response.ok) cache.put(event.request, response.clone());
+        return response;
+      })
+    );
+    return;
+  }
+
   // Network-first strategy — always try network, fallback to cache
   event.respondWith(
     fetch(event.request).catch(() => caches.match(event.request))

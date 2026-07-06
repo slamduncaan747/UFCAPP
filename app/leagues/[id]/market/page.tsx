@@ -7,7 +7,7 @@ import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Fighter, WaiverBidWithFighters, Roster } from '@/lib/types';
 import TransferBidCard from '@/components/TransferBidCard';
-import FreeAgentCard from '@/components/FreeAgentCard';
+import FreeAgentCard, { FreeAgentCardSkeleton } from '@/components/FreeAgentCard';
 import TransferFlowModal from '@/components/TransferFlowModal';
 import TransferHistoryModal from '@/components/TransferHistoryModal';
 
@@ -24,8 +24,6 @@ function useCountdown(): string {
     function calc() {
       const now = new Date();
       const day = now.getDay();
-      // Days until the upcoming Monday. On Monday itself the deadline is tonight
-      // (0 days); Sunday is tomorrow (1); otherwise count forward to next Monday.
       const daysUntilMonday = day === 1 ? 0 : day === 0 ? 1 : 8 - day;
       const next = new Date(now);
       next.setDate(now.getDate() + daysUntilMonday);
@@ -79,7 +77,6 @@ export default function MarketPage({ params }: MarketPageProps) {
     if (!membership) { setLoading(false); return; }
     setMembershipId(membership.id);
 
-    // Active waiver claims for this membership
     const { data: bidsData } = await supabase
       .from('waiver_claims')
       .select(`
@@ -93,7 +90,6 @@ export default function MarketPage({ params }: MarketPageProps) {
 
     setActiveBids((bidsData as WaiverBidWithFighters[]) ?? []);
 
-    // All rostered fighter IDs in the league
     const { data: allMemberships } = await supabase
       .from('league_memberships')
       .select('id')
@@ -116,8 +112,6 @@ export default function MarketPage({ params }: MarketPageProps) {
     const { data: faData } = await query;
     setFreeAgents((faData as Fighter[]) ?? []);
 
-    // Map each fighter → their earliest upcoming bout date (for the schedule
-    // sort + the date badge on each card).
     const { data: schedBouts } = await supabase
       .from('bouts')
       .select('fighter_a_id, fighter_b_id, event:events!inner(event_date)')
@@ -152,7 +146,6 @@ export default function MarketPage({ params }: MarketPageProps) {
       if (sortMode === 'schedule') {
         const aDate = boutDateMap[a.id];
         const bDate = boutDateMap[b.id];
-        // Fighters with an upcoming bout sort first, soonest at the top.
         if (aDate && bDate) return new Date(aDate).getTime() - new Date(bDate).getTime();
         if (aDate) return -1;
         if (bDate) return 1;
@@ -179,7 +172,7 @@ export default function MarketPage({ params }: MarketPageProps) {
 
         <div className="bg-zinc-900 border-2 border-zinc-800 rounded-xl p-3 flex items-center justify-between mb-5">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Waiver Deadline</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Waiver Deadline</p>
             <p className="text-[11px] font-black uppercase tracking-widest text-zinc-300">Monday Midnight EST</p>
           </div>
           <span className="text-[20px] font-mono font-black text-white tracking-tighter tabular-nums">{countdown}</span>
@@ -200,20 +193,24 @@ export default function MarketPage({ params }: MarketPageProps) {
         )}
 
         <div className="mb-3">
-          <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2">
-            {weightClasses.map((wc) => (
-              <button
-                key={wc}
-                onClick={() => setFilterClass(wc)}
-                className={`flex-shrink-0 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
-                  filterClass === wc
-                    ? 'bg-white text-black border-white'
-                    : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                }`}
-              >
-                {wc}
-              </button>
-            ))}
+          {/* Weight class filter with scroll fade */}
+          <div className="relative">
+            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2">
+              {weightClasses.map((wc) => (
+                <button
+                  key={wc}
+                  onClick={() => setFilterClass(wc)}
+                  className={`flex-shrink-0 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
+                    filterClass === wc
+                      ? 'bg-white text-black border-white'
+                      : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                  }`}
+                >
+                  {wc}
+                </button>
+              ))}
+            </div>
+            <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-[#030303] to-transparent pointer-events-none" />
           </div>
 
           <div className="flex gap-2 mt-2">
@@ -221,7 +218,7 @@ export default function MarketPage({ params }: MarketPageProps) {
               <button
                 key={mode}
                 onClick={() => setSortMode(mode)}
-                className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded border active:scale-95 transition-all ${
+                className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded border active:scale-95 transition-all ${
                   sortMode === mode
                     ? 'bg-zinc-800 text-white border-zinc-700'
                     : 'text-zinc-600 border-zinc-900'
@@ -234,8 +231,10 @@ export default function MarketPage({ params }: MarketPageProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <FreeAgentCardSkeleton key={i} />
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <p className="text-zinc-600 text-[12px] font-black uppercase tracking-widest text-center py-8">
@@ -244,7 +243,7 @@ export default function MarketPage({ params }: MarketPageProps) {
         ) : (
           <div className="space-y-2">
             {activeBids.length >= 2 && (
-              <p className="text-[9px] font-black uppercase tracking-widest text-amber-500/80 text-center pb-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-500/80 text-center pb-1">
                 Maximum 2 bids active — cancel one to add another
               </p>
             )}

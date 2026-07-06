@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { RosterSlot, FighterScore, SLOT_DISPLAY } from '@/lib/types';
-import { RosterCardWithPoints } from '@/components/RosterCard';
+import { RosterCardWithPoints, RosterCardSkeleton } from '@/components/RosterCard';
 import FighterDetailModal from '@/components/FighterDetailModal';
 
 interface RosterPageProps {
@@ -44,41 +44,51 @@ export default function RosterPage({ params }: RosterPageProps) {
 
       const membershipId = membership.id;
 
-      // Fetch roster with fighters
       const { data: rostersData } = await supabase
         .from('rosters')
         .select('*, fighter:fighters(*)')
         .eq('membership_id', membershipId);
 
+      const fighterIds = (rostersData ?? []).map((r) => r.fighter_id);
+
+      type BoutRow = { id: string; fighter_a_id: string; fighter_b_id: string; status?: string | null; event?: { event_date: string; status?: string; title?: string } | null };
+
+      // Batch bout query — one round trip for all fighters
+      let allBouts: BoutRow[] = [];
+      if (fighterIds.length > 0) {
+        const { data } = await supabase
+          .from('bouts')
+          .select('*, event:events(*)')
+          .or(fighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','))
+          .order('created_at', { ascending: false });
+        allBouts = (data ?? []) as BoutRow[];
+      }
+
+      // Pick most-recent bout per fighter (preserves original per-fighter limit 1 behavior)
+      const boutByFighter = new Map<string, BoutRow>();
+      for (const bout of allBouts) {
+        for (const fid of [bout.fighter_a_id, bout.fighter_b_id]) {
+          if (fighterIds.includes(fid) && !boutByFighter.has(fid)) {
+            boutByFighter.set(fid, bout);
+          }
+        }
+      }
+
       const now = new Date();
-      const enriched: RosterSlot[] = await Promise.all(
-        (rostersData ?? []).map(async (r) => {
-          const { data: boutData } = await supabase
-            .from('bouts')
-            .select('*, event:events(*)')
-            .or(`fighter_a_id.eq.${r.fighter_id},fighter_b_id.eq.${r.fighter_id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+      const enriched: RosterSlot[] = (rostersData ?? []).map((r) => {
+        const boutData = boutByFighter.get(r.fighter_id) ?? null;
+        const eventStart = boutData?.event?.event_date ? new Date(boutData.event.event_date) : null;
+        return {
+          ...r,
+          slot_type: SLOT_DISPLAY[r.slot] ?? r.slot,
+          next_bout: boutData,
+          is_locked: !!eventStart && eventStart <= now,
+        } as RosterSlot;
+      });
 
-          const eventStart = boutData?.event?.event_date
-            ? new Date(boutData.event.event_date)
-            : null;
-
-          return {
-            ...r,
-            slot_type: SLOT_DISPLAY[r.slot] ?? r.slot,
-            next_bout: boutData ?? null,
-            is_locked: !!eventStart && eventStart <= now,
-          } as RosterSlot;
-        })
-      );
-
-      // Fetch total points from scores table
-      const fighterIds = enriched.map((s) => s.fighter_id);
+      // Batch scores query
       const pMap: Record<string, number> = {};
       let total = 0;
-
       if (fighterIds.length > 0) {
         const { data: scoreRows } = await supabase
           .from('scores')
@@ -129,8 +139,10 @@ export default function RosterPage({ params }: RosterPageProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
+          <div className="space-y-4">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <RosterCardSkeleton key={i} />
+            ))}
           </div>
         ) : (
           <div className="space-y-4">

@@ -1,6 +1,7 @@
 'use client';
 
 import { BoutWithFighters } from '@/lib/types';
+import { FighterAvatar } from '@/components/FighterAvatar';
 
 interface LiveMatchupProps {
   bout: BoutWithFighters;
@@ -26,7 +27,6 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
   const aIsOwned = currentManagerFighterIds.includes(fighter_a.id);
   const bIsOwned = currentManagerFighterIds.includes(fighter_b.id);
 
-  // For completed bouts
   const aIsWinner = bout.winner_id === fighter_a.id;
   const bIsWinner = bout.winner_id === fighter_b.id;
 
@@ -42,7 +42,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
             LIVE • {bout.event?.title ?? 'UFC Event'}
           </h4>
           {rosteredCount > 0 && (
-            <div className="border-2 border-purple-500/40 bg-zinc-950 px-2 py-0.5 text-[9px] font-black text-purple-300 tracking-widest rounded">
+            <div className="border-2 border-purple-500/40 bg-zinc-950 px-2 py-0.5 text-[10px] font-black text-purple-300 tracking-widest rounded">
               {rosteredCount} ROSTERED
             </div>
           )}
@@ -50,13 +50,10 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
 
         <div className="flex items-center justify-between px-1 relative z-10">
           <div className="flex flex-col items-center w-[38%]">
-            <div className="relative w-14 h-14 rounded-full bg-zinc-900 border-[3px] border-purple-500 mb-1 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
-              {fighter_a.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fighter_a.image_url} alt={fighter_a.name} className="w-full h-full rounded-full object-cover" />
-              )}
+            <div className="relative mb-1">
+              <FighterAvatar fighter={fighter_a} size={56} className="border-[3px] border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]" />
               {aRank && (
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                   {aRank}
                 </span>
               )}
@@ -65,7 +62,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
               {fighter_a.name.split(' ').pop()}
             </span>
             {aIsOwned && (
-              <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-0.5">YOU</span>
+              <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest mt-0.5">YOU</span>
             )}
           </div>
 
@@ -77,13 +74,10 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
           </div>
 
           <div className="flex flex-col items-center w-[38%]">
-            <div className="relative w-14 h-14 rounded-full bg-zinc-900 border-[3px] border-zinc-700 mb-1">
-              {fighter_b.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fighter_b.image_url} alt={fighter_b.name} className="w-full h-full rounded-full object-cover" />
-              )}
+            <div className="relative mb-1">
+              <FighterAvatar fighter={fighter_b} size={56} className="border-[3px] border-zinc-700" />
               {bRank && (
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                   {bRank}
                 </span>
               )}
@@ -92,7 +86,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
               {fighter_b.name.split(' ').pop()}
             </span>
             {bIsOwned && (
-              <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-0.5">YOU</span>
+              <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest mt-0.5">YOU</span>
             )}
           </div>
         </div>
@@ -108,13 +102,10 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
       >
         <div className="flex items-center justify-between px-1">
           <div className="flex flex-col items-center w-[38%]">
-            <div className={`relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] mb-1 ${aIsWinner ? 'border-emerald-500' : 'border-zinc-700'}`}>
-              {fighter_a.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fighter_a.image_url} alt={fighter_a.name} className="w-full h-full rounded-full object-cover" />
-              )}
+            <div className="relative mb-1">
+              <FighterAvatar fighter={fighter_a} size={48} className={`border-[3px] ${aIsWinner ? 'border-emerald-500' : 'border-zinc-700'}`} />
               {aRank && (
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                   {aRank}
                 </span>
               )}
@@ -122,23 +113,20 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
             <span className={`text-[12px] font-black uppercase tracking-tighter truncate w-full text-center mt-2 ${aIsWinner ? 'text-white' : 'text-zinc-500'}`}>
               {fighter_a.name.split(' ').pop()}
             </span>
-            {aIsOwned && <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mt-0.5">YOU</span>}
+            {aIsOwned && <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mt-0.5">YOU</span>}
           </div>
 
           <div className="flex flex-col items-center justify-center w-[24%]">
-            <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 text-center leading-tight">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center leading-tight">
               {bout.method_of_victory ?? 'DEC'}<br />R{bout.round_ended ?? '?'}
             </span>
           </div>
 
           <div className="flex flex-col items-center w-[38%]">
-            <div className={`relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] mb-1 ${bIsWinner ? 'border-emerald-500' : 'border-zinc-700'}`}>
-              {fighter_b.image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={fighter_b.image_url} alt={fighter_b.name} className="w-full h-full rounded-full object-cover" />
-              )}
+            <div className="relative mb-1">
+              <FighterAvatar fighter={fighter_b} size={48} className={`border-[3px] ${bIsWinner ? 'border-emerald-500' : 'border-zinc-700'}`} />
               {bRank && (
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                   {bRank}
                 </span>
               )}
@@ -146,7 +134,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
             <span className={`text-[12px] font-black uppercase tracking-tighter truncate w-full text-center mt-2 ${bIsWinner ? 'text-white' : 'text-zinc-500'}`}>
               {fighter_b.name.split(' ').pop()}
             </span>
-            {bIsOwned && <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mt-0.5">YOU</span>}
+            {bIsOwned && <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mt-0.5">YOU</span>}
           </div>
         </div>
       </button>
@@ -161,13 +149,10 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
     >
       <div className="flex items-center justify-between px-1">
         <div className="flex flex-col items-center w-[38%]">
-          <div className={`relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] mb-1 ${aIsOwned ? 'border-blue-500' : 'border-zinc-700'}`}>
-            {fighter_a.image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fighter_a.image_url} alt={fighter_a.name} className="w-full h-full rounded-full object-cover" />
-            )}
+          <div className="relative mb-1">
+            <FighterAvatar fighter={fighter_a} size={48} className={`border-[3px] ${aIsOwned ? 'border-blue-500' : 'border-zinc-700'}`} />
             {aRank && (
-              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                 {aRank}
               </span>
             )}
@@ -175,7 +160,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
           <span className="text-[12px] font-black uppercase tracking-tighter text-white truncate w-full text-center mt-2">
             {fighter_a.name.split(' ').pop()}
           </span>
-          {aIsOwned && <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mt-0.5">YOU</span>}
+          {aIsOwned && <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mt-0.5">YOU</span>}
         </div>
 
         <div className="flex flex-col items-center justify-center w-[24%]">
@@ -183,13 +168,10 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
         </div>
 
         <div className="flex flex-col items-center w-[38%]">
-          <div className={`relative w-12 h-12 rounded-full bg-zinc-900 border-[3px] mb-1 ${bIsOwned ? 'border-blue-500' : 'border-zinc-700'}`}>
-            {fighter_b.image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fighter_b.image_url} alt={fighter_b.name} className="w-full h-full rounded-full object-cover" />
-            )}
+          <div className="relative mb-1">
+            <FighterAvatar fighter={fighter_b} size={48} className={`border-[3px] ${bIsOwned ? 'border-blue-500' : 'border-zinc-700'}`} />
             {bRank && (
-              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
                 {bRank}
               </span>
             )}
@@ -197,7 +179,7 @@ export default function LiveMatchup({ bout, rosteredCount = 0, currentManagerFig
           <span className="text-[12px] font-black uppercase tracking-tighter text-white truncate w-full text-center mt-2">
             {fighter_b.name.split(' ').pop()}
           </span>
-          {bIsOwned && <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest mt-0.5">YOU</span>}
+          {bIsOwned && <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mt-0.5">YOU</span>}
         </div>
       </div>
     </button>

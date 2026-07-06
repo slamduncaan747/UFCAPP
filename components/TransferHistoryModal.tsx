@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { WaiverBid, Fighter } from '@/lib/types';
 import SlideUpModal from './SlideUpModal';
+import { FighterAvatar } from '@/components/FighterAvatar';
 
 interface HistoryEntry extends WaiverBid {
   add_fighter: Fighter;
@@ -71,7 +72,7 @@ export default function TransferHistoryModal({ leagueId, isOpen, onClose }: Tran
                   <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
                     {entry.membership?.team_name ?? '—'}
                   </span>
-                  <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">
+                  <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
                     {new Date(entry.created_at ?? '').toLocaleDateString('en-US', {
                       month: 'short', day: 'numeric',
                     })}
@@ -80,12 +81,7 @@ export default function TransferHistoryModal({ leagueId, isOpen, onClose }: Tran
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2 flex-1">
-                    <div className="w-8 h-8 rounded-full bg-zinc-900 border-[2px] border-rose-900/70 flex-shrink-0">
-                      {entry.drop_fighter.image_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={entry.drop_fighter.image_url} alt={entry.drop_fighter.name} className="w-full h-full rounded-full object-cover" />
-                      )}
-                    </div>
+                    <FighterAvatar fighter={entry.drop_fighter} size={32} className="border-[2px] border-rose-900/70 flex-shrink-0" />
                     <span className="text-[12px] font-black uppercase tracking-tighter text-zinc-400 truncate">
                       {entry.drop_fighter.name}
                     </span>
@@ -104,12 +100,7 @@ export default function TransferHistoryModal({ leagueId, isOpen, onClose }: Tran
                     <span className="text-[12px] font-black uppercase tracking-tighter text-white truncate">
                       {entry.add_fighter.name}
                     </span>
-                    <div className="w-8 h-8 rounded-full bg-zinc-900 border-[2px] border-emerald-500/70 flex-shrink-0">
-                      {entry.add_fighter.image_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={entry.add_fighter.image_url} alt={entry.add_fighter.name} className="w-full h-full rounded-full object-cover" />
-                      )}
-                    </div>
+                    <FighterAvatar fighter={entry.add_fighter} size={32} className="border-[2px] border-emerald-500/70 flex-shrink-0" />
                   </div>
                 </div>
               </div>

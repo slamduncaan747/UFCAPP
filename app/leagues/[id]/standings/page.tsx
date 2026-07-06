@@ -14,6 +14,21 @@ interface StandingsPageProps {
   params: Promise<{ id: string }>;
 }
 
+function StandingsRowSkeleton() {
+  return (
+    <div className="w-full bg-[#050507] border-2 border-zinc-800 rounded-xl p-3 flex items-center justify-between animate-pulse">
+      <div className="flex items-center space-x-5">
+        <div className="w-6 h-8 bg-zinc-800 rounded" />
+        <div className="flex flex-col gap-2">
+          <div className="h-4 bg-zinc-800 rounded w-28" />
+          <div className="h-3 bg-zinc-800 rounded w-20" />
+        </div>
+      </div>
+      <div className="h-8 w-16 bg-zinc-800 rounded" />
+    </div>
+  );
+}
+
 export default function StandingsPage({ params }: StandingsPageProps) {
   const { id: leagueId } = use(params);
   const [managers, setManagers] = useState<ManagerWithRoster[]>([]);
@@ -28,7 +43,6 @@ export default function StandingsPage({ params }: StandingsPageProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get current user's membership
       const { data: myMembership } = await supabase
         .from('league_memberships')
         .select('id')
@@ -39,61 +53,65 @@ export default function StandingsPage({ params }: StandingsPageProps) {
 
       setCurrentManagerId(myMembership?.id ?? null);
 
-      // Fetch all memberships for this league (including unclaimed)
       const { data: memberships } = await supabase
         .from('league_memberships')
         .select('id, league_id, user_id, team_name')
         .eq('league_id', leagueId);
 
-      const enriched: ManagerWithRoster[] = await Promise.all(
-        (memberships ?? []).map(async (m) => {
-          // Compute total points from scores
-          const { data: scoreRows } = await supabase
-            .from('scores')
-            .select('points')
-            .eq('membership_id', m.id);
+      const membershipIds = (memberships ?? []).map((m) => m.id);
 
-          const total = (scoreRows ?? []).reduce((sum: number, s: { points: number }) => sum + s.points, 0);
+      // Batch queries — 3 round trips instead of 3N
+      const [{ data: allScores }, { data: allRosters }] = await Promise.all([
+        supabase.from('scores').select('membership_id, points').in('membership_id', membershipIds),
+        supabase.from('rosters').select('membership_id, fighter_id').in('membership_id', membershipIds),
+      ]);
 
-          // Count fighters with completed bouts
-          const { data: rosters } = await supabase
-            .from('rosters')
-            .select('fighter_id')
-            .eq('membership_id', m.id);
+      const allFighterIds = [...new Set((allRosters ?? []).map((r) => r.fighter_id))];
 
-          const fighterIds = (rosters ?? []).map((r: { fighter_id: string }) => r.fighter_id);
-          let completedCount = 0;
+      let completedBouts: Array<{ fighter_a_id: string; fighter_b_id: string }> = [];
+      if (allFighterIds.length > 0) {
+        const { data } = await supabase
+          .from('bouts')
+          .select('fighter_a_id, fighter_b_id')
+          .eq('status', 'completed')
+          .or(allFighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','));
+        completedBouts = data ?? [];
+      }
 
-          if (fighterIds.length > 0) {
-            const { data: completedBouts } = await supabase
-              .from('bouts')
-              .select('fighter_a_id, fighter_b_id')
-              .eq('status', 'completed')
-              .or(fighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','));
+      // Build lookup maps
+      const scoresByMembership = new Map<string, number>();
+      (allScores ?? []).forEach((s: { membership_id: string; points: number }) => {
+        scoresByMembership.set(s.membership_id, (scoresByMembership.get(s.membership_id) ?? 0) + s.points);
+      });
 
-            const completedFighterIds = new Set<string>();
-            (completedBouts ?? []).forEach((b: { fighter_a_id: string; fighter_b_id: string }) => {
-              if (fighterIds.includes(b.fighter_a_id)) completedFighterIds.add(b.fighter_a_id);
-              if (fighterIds.includes(b.fighter_b_id)) completedFighterIds.add(b.fighter_b_id);
-            });
-            completedCount = completedFighterIds.size;
-          }
+      const rostersByMembership = new Map<string, string[]>();
+      (allRosters ?? []).forEach((r: { membership_id: string; fighter_id: string }) => {
+        if (!rostersByMembership.has(r.membership_id)) rostersByMembership.set(r.membership_id, []);
+        rostersByMembership.get(r.membership_id)!.push(r.fighter_id);
+      });
 
-          return {
-            id: m.id,
-            league_id: m.league_id,
-            user_id: m.user_id,
-            team_name: m.team_name,
-            display_name: m.team_name,
-            total_points: total,
-            completed_fighters: completedCount,
-          };
-        })
-      );
+      const completedFighterSet = new Set<string>();
+      completedBouts.forEach((b) => {
+        completedFighterSet.add(b.fighter_a_id);
+        completedFighterSet.add(b.fighter_b_id);
+      });
 
-      // Sort by total points descending
+      const enriched: ManagerWithRoster[] = (memberships ?? []).map((m) => {
+        const total = scoresByMembership.get(m.id) ?? 0;
+        const fighterIds = rostersByMembership.get(m.id) ?? [];
+        const completedCount = fighterIds.filter((id) => completedFighterSet.has(id)).length;
+        return {
+          id: m.id,
+          league_id: m.league_id,
+          user_id: m.user_id,
+          team_name: m.team_name,
+          display_name: m.team_name,
+          total_points: total,
+          completed_fighters: completedCount,
+        };
+      });
+
       enriched.sort((a, b) => b.total_points - a.total_points);
-
       setManagers(enriched);
       setLoading(false);
     }
@@ -118,8 +136,10 @@ export default function StandingsPage({ params }: StandingsPageProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-7 h-7 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
+          <div className="space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <StandingsRowSkeleton key={i} />
+            ))}
           </div>
         ) : (
           <div className="space-y-2">
