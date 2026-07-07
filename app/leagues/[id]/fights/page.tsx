@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState, useCallback } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getUserId } from '@/lib/identity';
 import { EventWithBouts, BoutWithFighters, Bout } from '@/lib/types';
 import LiveMatchup from '@/components/LiveMatchup';
 import EventDetailModal from '@/components/EventDetailModal';
@@ -23,16 +24,15 @@ export default function FightsPage({ params }: FightsPageProps) {
   const supabase = createClient();
 
   const loadData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = getUserId();
+    if (!userId) return;
 
     // My fighter IDs
     const { data: myMembership } = await supabase
       .from('league_memberships')
       .select('id')
       .eq('league_id', leagueId)
-      .eq('user_id', user.id)
-      .eq('claimable', false)
+      .eq('user_id', userId)
       .single();
 
     let myIds: string[] = [];

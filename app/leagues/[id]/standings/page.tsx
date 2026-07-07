@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getUserId } from '@/lib/identity';
 import { ManagerWithRoster } from '@/lib/types';
 import StandingsRow from '@/components/StandingsRow';
 import OpponentRosterModal from '@/components/OpponentRosterModal';
@@ -40,15 +41,14 @@ export default function StandingsPage({ params }: StandingsPageProps) {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const userId = getUserId();
+      if (!userId) return;
 
       const { data: myMembership } = await supabase
         .from('league_memberships')
         .select('id')
         .eq('league_id', leagueId)
-        .eq('user_id', user.id)
-        .eq('claimable', false)
+        .eq('user_id', userId)
         .single();
 
       setCurrentManagerId(myMembership?.id ?? null);

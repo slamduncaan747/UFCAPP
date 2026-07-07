@@ -1,36 +1,12 @@
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// Authentication is wide open: there is no login, just a one-time "who are you"
+// selection stored in the `ufc_user_id` cookie (see lib/identity.ts). This
+// middleware only routes based on whether that selection has been made.
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname.startsWith('/auth');
+
+  const isSelectRoute = pathname.startsWith('/auth');
   const isPublicAsset =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
@@ -38,17 +14,21 @@ export async function proxy(request: NextRequest) {
     pathname === '/sw.js' ||
     pathname.match(/\.(ico|png|jpg|svg|webp)$/);
 
-  if (isPublicAsset) return supabaseResponse;
+  if (isPublicAsset) return NextResponse.next();
 
-  if (!user && !isAuthRoute) {
+  const userId = request.cookies.get('ufc_user_id')?.value;
+
+  // No identity picked yet → send them to the picker.
+  if (!userId && !isSelectRoute) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 
-  if (user && pathname === '/') {
+  // Already picked → skip the picker and the landing page.
+  if (userId && (pathname === '/' || isSelectRoute)) {
     return NextResponse.redirect(new URL('/leagues', request.url));
   }
 
-  return supabaseResponse;
+  return NextResponse.next();
 }
 
 export const config = {

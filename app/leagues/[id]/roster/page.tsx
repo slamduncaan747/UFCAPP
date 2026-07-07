@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getUserId } from '@/lib/identity';
 import { RosterSlot, FighterScore, SLOT_DISPLAY } from '@/lib/types';
 import { RosterCardWithPoints, RosterCardSkeleton } from '@/components/RosterCard';
 import FighterDetailModal from '@/components/FighterDetailModal';
@@ -25,8 +26,8 @@ export default function RosterPage({ params }: RosterPageProps) {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const userId = getUserId();
+      if (!userId) return;
 
       const [{ data: league }, { data: membership }] = await Promise.all([
         supabase.from('leagues').select('name').eq('id', leagueId).single(),
@@ -34,8 +35,7 @@ export default function RosterPage({ params }: RosterPageProps) {
           .from('league_memberships')
           .select('id')
           .eq('league_id', leagueId)
-          .eq('user_id', user.id)
-          .eq('claimable', false)
+          .eq('user_id', userId)
           .single(),
       ]);
 

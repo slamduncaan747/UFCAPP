@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState, useCallback } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getUserId } from '@/lib/identity';
 import { Fighter, WaiverBidWithFighters, Roster } from '@/lib/types';
 import TransferBidCard from '@/components/TransferBidCard';
 import FreeAgentCard, { FreeAgentCardSkeleton } from '@/components/FreeAgentCard';
@@ -63,15 +64,14 @@ export default function MarketPage({ params }: MarketPageProps) {
   ];
 
   const loadData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = getUserId();
+    if (!userId) return;
 
     const { data: membership } = await supabase
       .from('league_memberships')
       .select('id')
       .eq('league_id', leagueId)
-      .eq('user_id', user.id)
-      .eq('claimable', false)
+      .eq('user_id', userId)
       .single();
 
     if (!membership) { setLoading(false); return; }

@@ -4,7 +4,9 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
 import { use } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getUserId, clearUserId } from '@/lib/identity';
 import { League } from '@/lib/types';
 
 interface SettingsPageProps {
@@ -35,12 +37,19 @@ export default function SettingsPage({ params }: SettingsPageProps) {
   const [processing, setProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const router = useRouter();
   const supabase = createClient();
+
+  function switchPlayer() {
+    clearUserId();
+    localStorage.removeItem('last_visited_league_id');
+    router.replace('/auth/login');
+  }
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const userId = getUserId();
+      if (!userId) return;
 
       const [{ data: leagueData }, { data: membership }] = await Promise.all([
         supabase.from('leagues').select('*').eq('id', leagueId).single(),
@@ -48,7 +57,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
           .from('league_memberships')
           .select('role')
           .eq('league_id', leagueId)
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .single(),
       ]);
 
@@ -106,6 +115,18 @@ export default function SettingsPage({ params }: SettingsPageProps) {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="mb-6">
+        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3">
+          Account
+        </p>
+        <button
+          onClick={switchPlayer}
+          className="w-full bg-[#050507] border-2 border-zinc-800 text-zinc-300 font-black uppercase tracking-widest text-[12px] py-3 rounded-xl active:scale-[0.98] transition-transform"
+        >
+          Switch Player
+        </button>
       </div>
 
       {isCommissioner && (

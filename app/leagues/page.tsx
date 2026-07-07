@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getUserId } from '@/lib/identity';
 import { League } from '@/lib/types';
 
 export default function LeaguesPage() {
@@ -22,14 +23,13 @@ export default function LeaguesPage() {
     }
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/auth/login'); return; }
+      const userId = getUserId();
+      if (!userId) { router.push('/auth/login'); return; }
 
       const { data: managerRows } = await supabase
         .from('league_memberships')
         .select('league_id')
-        .eq('user_id', user.id)
-        .eq('claimable', false);
+        .eq('user_id', userId);
 
       const leagueIds = (managerRows ?? []).map((m: { league_id: string }) => m.league_id);
       if (leagueIds.length === 0) { setLoading(false); return; }
