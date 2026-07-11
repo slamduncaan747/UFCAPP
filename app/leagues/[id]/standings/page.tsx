@@ -9,10 +9,19 @@ import { getUserId } from '@/lib/identity';
 import { ManagerWithRoster } from '@/lib/types';
 import StandingsRow from '@/components/StandingsRow';
 import OpponentRosterModal from '@/components/OpponentRosterModal';
-import SeasonChartModal from '@/components/SeasonChartModal';
+import SeasonChartModal, { EventSnapshot } from '@/components/SeasonChartModal';
 
 interface StandingsPageProps {
   params: Promise<{ id: string }>;
+}
+
+interface ScoreRow {
+  membership_id: string;
+  fighter_id: string;
+  points: number;
+  bout: {
+    event: { id: string; name: string; event_date: string } | null;
+  } | null;
 }
 
 function StandingsRowSkeleton() {
@@ -33,6 +42,7 @@ function StandingsRowSkeleton() {
 export default function StandingsPage({ params }: StandingsPageProps) {
   const { id: leagueId } = use(params);
   const [managers, setManagers] = useState<ManagerWithRoster[]>([]);
+  const [snapshots, setSnapshots] = useState<EventSnapshot[]>([]);
   const [currentManagerId, setCurrentManagerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
@@ -44,75 +54,69 @@ export default function StandingsPage({ params }: StandingsPageProps) {
       const userId = getUserId();
       if (!userId) return;
 
-      const { data: myMembership } = await supabase
-        .from('league_memberships')
-        .select('id')
-        .eq('league_id', leagueId)
-        .eq('user_id', userId)
-        .single();
-
-      setCurrentManagerId(myMembership?.id ?? null);
-
       const { data: memberships } = await supabase
         .from('league_memberships')
         .select('id, league_id, user_id, team_name')
         .eq('league_id', leagueId);
 
-      const membershipIds = (memberships ?? []).map((m) => m.id);
+      const rows = memberships ?? [];
+      setCurrentManagerId(rows.find((m) => m.user_id === userId)?.id ?? null);
 
-      // Batch queries — 3 round trips instead of 3N
-      const [{ data: allScores }, { data: allRosters }] = await Promise.all([
-        supabase.from('scores').select('membership_id, points').in('membership_id', membershipIds),
-        supabase.from('rosters').select('membership_id, fighter_id').in('membership_id', membershipIds),
-      ]);
+      const membershipIds = rows.map((m) => m.id);
+      const { data: allScores } = await supabase
+        .from('scores')
+        .select('membership_id, fighter_id, points, bout:bouts(event:events(id, name, event_date))')
+        .in('membership_id', membershipIds);
 
-      const allFighterIds = [...new Set((allRosters ?? []).map((r) => r.fighter_id))];
+      const scores = ((allScores as unknown as ScoreRow[]) ?? []);
 
-      let completedBouts: Array<{ fighter_a_id: string; fighter_b_id: string }> = [];
-      if (allFighterIds.length > 0) {
-        const { data } = await supabase
-          .from('bouts')
-          .select('fighter_a_id, fighter_b_id')
-          .eq('status', 'completed')
-          .or(allFighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','));
-        completedBouts = data ?? [];
-      }
-
-      // Build lookup maps
-      const scoresByMembership = new Map<string, number>();
-      (allScores ?? []).forEach((s: { membership_id: string; points: number }) => {
-        scoresByMembership.set(s.membership_id, (scoresByMembership.get(s.membership_id) ?? 0) + s.points);
+      // Totals + how many roster fighters have fought this season
+      const totals = new Map<string, number>();
+      const foughtFighters = new Map<string, Set<string>>();
+      scores.forEach((s) => {
+        totals.set(s.membership_id, (totals.get(s.membership_id) ?? 0) + s.points);
+        if (!foughtFighters.has(s.membership_id)) foughtFighters.set(s.membership_id, new Set());
+        foughtFighters.get(s.membership_id)!.add(s.fighter_id);
       });
 
-      const rostersByMembership = new Map<string, string[]>();
-      (allRosters ?? []).forEach((r: { membership_id: string; fighter_id: string }) => {
-        if (!rostersByMembership.has(r.membership_id)) rostersByMembership.set(r.membership_id, []);
-        rostersByMembership.get(r.membership_id)!.push(r.fighter_id);
-      });
-
-      const completedFighterSet = new Set<string>();
-      completedBouts.forEach((b) => {
-        completedFighterSet.add(b.fighter_a_id);
-        completedFighterSet.add(b.fighter_b_id);
-      });
-
-      const enriched: ManagerWithRoster[] = (memberships ?? []).map((m) => {
-        const total = scoresByMembership.get(m.id) ?? 0;
-        const fighterIds = rostersByMembership.get(m.id) ?? [];
-        const completedCount = fighterIds.filter((id) => completedFighterSet.has(id)).length;
-        return {
-          id: m.id,
-          league_id: m.league_id,
-          user_id: m.user_id,
-          team_name: m.team_name,
-          display_name: m.team_name,
-          total_points: total,
-          completed_fighters: completedCount,
-        };
-      });
-
+      const enriched: ManagerWithRoster[] = rows.map((m) => ({
+        id: m.id,
+        league_id: m.league_id,
+        user_id: m.user_id,
+        team_name: m.team_name,
+        display_name: m.team_name,
+        total_points: totals.get(m.id) ?? 0,
+        completed_fighters: foughtFighters.get(m.id)?.size ?? 0,
+      }));
       enriched.sort((a, b) => b.total_points - a.total_points);
+
+      // Season chart: cumulative points per manager after each scored event
+      const eventMap = new Map<string, { name: string; date: string; points: Map<string, number> }>();
+      scores.forEach((s) => {
+        const ev = s.bout?.event;
+        if (!ev) return;
+        if (!eventMap.has(ev.id)) {
+          eventMap.set(ev.id, { name: ev.name, date: ev.event_date, points: new Map() });
+        }
+        const bucket = eventMap.get(ev.id)!;
+        bucket.points.set(s.membership_id, (bucket.points.get(s.membership_id) ?? 0) + s.points);
+      });
+
+      const orderedEvents = [...eventMap.values()].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      const running = new Map<string, number>();
+      const snaps: EventSnapshot[] = orderedEvents.map((ev) => {
+        rows.forEach((m) => {
+          running.set(m.id, (running.get(m.id) ?? 0) + (ev.points.get(m.id) ?? 0));
+        });
+        const managerPoints: Record<string, number> = {};
+        rows.forEach((m) => { managerPoints[m.id] = running.get(m.id) ?? 0; });
+        return { eventTitle: ev.name, managerPoints };
+      });
+
       setManagers(enriched);
+      setSnapshots(snaps);
       setLoading(false);
     }
 
@@ -166,7 +170,7 @@ export default function StandingsPage({ params }: StandingsPageProps) {
         isOpen={showChart}
         onClose={() => setShowChart(false)}
         managers={managers}
-        snapshots={[]}
+        snapshots={snapshots}
       />
     </>
   );

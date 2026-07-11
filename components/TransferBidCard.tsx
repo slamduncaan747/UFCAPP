@@ -2,6 +2,7 @@
 
 import { WaiverBidWithFighters } from '@/lib/types';
 import { FighterAvatar } from '@/components/FighterAvatar';
+import { rankLabel, recordString, weightClassName } from '@/lib/helpers';
 
 interface TransferBidCardProps {
   bid: WaiverBidWithFighters;
@@ -9,21 +10,16 @@ interface TransferBidCardProps {
   onCancel: () => void;
 }
 
-function rankLabel(rank: number | null) {
-  if (rank === null) return null;
-  return rank === 0 ? 'C' : `#${rank}`;
-}
-
 export default function TransferBidCard({ bid, prioritySlot, onCancel }: TransferBidCardProps) {
   const drop = bid.drop_fighter;
   const add = bid.add_fighter;
-  const dropRank = rankLabel(drop.official_rank);
-  const addRank = rankLabel(add.official_rank);
+  const dropRank = rankLabel(drop);
+  const addRank = rankLabel(add);
 
   return (
     <div className="relative bg-zinc-900/40 border-2 border-zinc-800/80 rounded-2xl p-4 pt-6 flex flex-col shadow-sm mt-6">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-4 py-0.5 rounded-b text-[10px] font-black uppercase tracking-widest text-white whitespace-nowrap">
-        Priority {prioritySlot} • {drop.weight_class}
+        Priority {prioritySlot} • {weightClassName(bid.slot ?? drop.weight_class)}
       </div>
 
       <div className="flex items-center justify-between w-full mt-2">
@@ -42,7 +38,7 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
               {drop.name.split(' ').pop()}
             </h4>
             <span className="text-[10px] font-bold text-zinc-500 tracking-widest">
-              {drop.wins}-{drop.losses}-{drop.draws}
+              {recordString(drop)}
             </span>
           </div>
         </div>
@@ -66,7 +62,7 @@ export default function TransferBidCard({ bid, prioritySlot, onCancel }: Transfe
               {add.name.split(' ').pop()}
             </h4>
             <span className="text-[10px] font-bold text-zinc-500 tracking-widest">
-              {add.wins}-{add.losses}-{add.draws}
+              {recordString(add)}
             </span>
           </div>
           <div className="relative flex-shrink-0">

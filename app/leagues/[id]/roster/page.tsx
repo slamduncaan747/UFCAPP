@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getUserId } from '@/lib/identity';
-import { RosterSlot, FighterScore, SLOT_DISPLAY } from '@/lib/types';
+import { RosterSlot, SLOT_ORDER } from '@/lib/types';
+import { fetchRosterSlots } from '@/lib/data';
 import { RosterCardWithPoints, RosterCardSkeleton } from '@/components/RosterCard';
 import FighterDetailModal from '@/components/FighterDetailModal';
 
@@ -42,65 +43,19 @@ export default function RosterPage({ params }: RosterPageProps) {
       setLeagueName(league?.name ?? '');
       if (!membership) { setLoading(false); return; }
 
-      const membershipId = membership.id;
+      const enriched = await fetchRosterSlots(supabase, membership.id);
 
-      const { data: rostersData } = await supabase
-        .from('rosters')
-        .select('*, fighter:fighters(*)')
-        .eq('membership_id', membershipId);
-
-      const fighterIds = (rostersData ?? []).map((r) => r.fighter_id);
-
-      type BoutRow = { id: string; fighter_a_id: string; fighter_b_id: string; status?: string | null; event?: { event_date: string; status?: string; title?: string } | null };
-
-      // Batch bout query — one round trip for all fighters
-      let allBouts: BoutRow[] = [];
-      if (fighterIds.length > 0) {
-        const { data } = await supabase
-          .from('bouts')
-          .select('*, event:events(*)')
-          .or(fighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','))
-          .order('created_at', { ascending: false });
-        allBouts = (data ?? []) as BoutRow[];
-      }
-
-      // Pick most-recent bout per fighter (preserves original per-fighter limit 1 behavior)
-      const boutByFighter = new Map<string, BoutRow>();
-      for (const bout of allBouts) {
-        for (const fid of [bout.fighter_a_id, bout.fighter_b_id]) {
-          if (fighterIds.includes(fid) && !boutByFighter.has(fid)) {
-            boutByFighter.set(fid, bout);
-          }
-        }
-      }
-
-      const now = new Date();
-      const enriched: RosterSlot[] = (rostersData ?? []).map((r) => {
-        const boutData = boutByFighter.get(r.fighter_id) ?? null;
-        const eventStart = boutData?.event?.event_date ? new Date(boutData.event.event_date) : null;
-        return {
-          ...r,
-          slot_type: SLOT_DISPLAY[r.slot] ?? r.slot,
-          next_bout: boutData,
-          is_locked: !!eventStart && eventStart <= now,
-        } as RosterSlot;
-      });
-
-      // Batch scores query
+      // Season points per fighter
       const pMap: Record<string, number> = {};
       let total = 0;
-      if (fighterIds.length > 0) {
-        const { data: scoreRows } = await supabase
-          .from('scores')
-          .select('fighter_id, points')
-          .eq('membership_id', membershipId)
-          .in('fighter_id', fighterIds);
-
-        (scoreRows ?? []).forEach((s: Pick<FighterScore, 'fighter_id' | 'points'>) => {
-          pMap[s.fighter_id] = (pMap[s.fighter_id] ?? 0) + s.points;
-          total += s.points;
-        });
-      }
+      const { data: scoreRows } = await supabase
+        .from('scores')
+        .select('fighter_id, points')
+        .eq('membership_id', membership.id);
+      (scoreRows ?? []).forEach((s: { fighter_id: string; points: number }) => {
+        pMap[s.fighter_id] = (pMap[s.fighter_id] ?? 0) + s.points;
+        total += s.points;
+      });
 
       setSlots(enriched);
       setPointsMap(pMap);
@@ -111,13 +66,8 @@ export default function RosterPage({ params }: RosterPageProps) {
     load();
   }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const SLOT_ORDER = [
-    'Flyweight', 'Bantamweight', 'Featherweight',
-    'Lightweight', 'Welterweight', 'Middleweight',
-    'Light Heavyweight', 'Heavyweight', 'Wildcard',
-  ];
   const sorted = [...slots].sort(
-    (a, b) => SLOT_ORDER.indexOf(a.slot_type) - SLOT_ORDER.indexOf(b.slot_type)
+    (a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot)
   );
 
   return (

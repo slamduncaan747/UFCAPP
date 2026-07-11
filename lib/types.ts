@@ -1,6 +1,19 @@
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
-// Maps DB slot enum → display weight class name
+// ─── Enums (mirror the Postgres enum types) ──────────────────────────────────
+
+export type WeightClassCode = 'FLW' | 'BW' | 'FW' | 'LW' | 'WW' | 'MW' | 'LHW' | 'HW';
+export type SlotCode = WeightClassCode | 'WILDCARD';
+export type EventStatus = 'scheduled' | 'in_progress' | 'completed';
+export type BoutStatus = 'scheduled' | 'completed' | 'cancelled';
+export type BoutMethod = 'KO' | 'TKO' | 'SUB' | 'DEC' | 'DQ' | 'NC';
+export type CardSegment = 'early_prelim' | 'prelim' | 'main';
+
+export const WEIGHT_CLASS_CODES: WeightClassCode[] = [
+  'FLW', 'BW', 'FW', 'LW', 'WW', 'MW', 'LHW', 'HW',
+];
+
+// DB slot / weight-class enum code → display name
 export const SLOT_DISPLAY: Record<string, string> = {
   FLW: 'Flyweight',
   BW: 'Bantamweight',
@@ -13,29 +26,43 @@ export const SLOT_DISPLAY: Record<string, string> = {
   WILDCARD: 'Wildcard',
 };
 
+export const SLOT_ORDER: SlotCode[] = [
+  'FLW', 'BW', 'FW', 'LW', 'WW', 'MW', 'LHW', 'HW', 'WILDCARD',
+];
+
 // ─── Database Tables ────────────────────────────────────────────────────────
 
 export interface Fighter {
   id: string;
   name: string;
   nickname: string | null;
-  image_url: string | null;
-  weight_class: string;
-  wins: number;
-  losses: number;
-  draws: number;
-  official_rank: number | null;
-  created_at: string;
+  photo_url: string | null;
+  weight_class: WeightClassCode;
+  gender: string;
+  record_w: number;
+  record_l: number;
+  record_d: number;
+  current_ranking: number | null;
+  is_champion: boolean;
+  ranking_division: WeightClassCode | null;
+  status: 'active' | 'inactive' | 'retired';
+  draft_score: number | null;
+  last_fight_at: string | null;
 }
 
 export interface League {
   id: string;
   name: string;
-  commissioner_id: string | null;
+  logo_url: string | null;
+  commissioner_id: string;
+  is_public: boolean;
+  invite_code: string;
+  season_start_date: string;
+  status: 'setup' | 'drafting' | 'active' | 'completed';
   created_at: string;
 }
 
-// Maps from league_memberships table
+// Row from league_memberships (+ computed standings fields)
 export interface Manager {
   id: string;
   league_id: string;
@@ -43,14 +70,16 @@ export interface Manager {
   team_name: string;
   display_name: string;  // same as team_name, kept for component compat
   total_points: number;  // computed from scores table
-  waiver_priority?: number;
+  role?: 'commissioner' | 'member';
 }
 
 export interface Event {
   id: string;
-  title: string;
+  name: string;
   event_date: string;
-  status: 'upcoming' | 'live' | 'completed';
+  location: string | null;
+  lock_time: string;
+  status: EventStatus;
 }
 
 export interface Bout {
@@ -58,27 +87,36 @@ export interface Bout {
   event_id: string;
   fighter_a_id: string;
   fighter_b_id: string;
-  is_main_event: boolean;
+  weight_class: WeightClassCode;
   is_title_fight: boolean;
-  status: 'scheduled' | 'live' | 'completed';
-  current_round: number | null;
-  method_of_victory: string | null;
-  round_ended: number | null;
-  time_ended: string | null;
+  is_main_event: boolean;
+  card_segment: CardSegment;
+  bout_order: number;
+  scheduled_start: string | null;
+  status: BoutStatus;
   winner_id: string | null;
+  method: BoutMethod | null;
+  is_finish: boolean;
+  end_round: number | null;
+  fighter_a_ranked: boolean;
+  fighter_b_ranked: boolean;
+  fotn: boolean;
+  fighter_a_potn: boolean;
+  fighter_b_potn: boolean;
 }
 
-// Maps from rosters table (new schema)
+// Row from rosters
 export interface Roster {
   id: string;
   membership_id: string;
   league_id: string;
   fighter_id: string;
-  slot: string;       // DB enum value: 'FLW', 'BW', etc.
-  slot_type: string;  // Display name: 'Flyweight', 'Bantamweight', etc. (derived)
+  slot: SlotCode;
+  acquired_at: string;
+  acquired_via: 'draft' | 'free_agent';
 }
 
-// Maps from waiver_claims table
+// Row from waiver_claims
 export interface WaiverBid {
   id: string;
   league_id: string;
@@ -87,12 +125,17 @@ export interface WaiverBid {
   drop_fighter_id: string;
   bid_priority: number;
   status: 'pending' | 'won' | 'lost' | 'invalid' | 'cancelled';
+  slot: SlotCode | null;
+  period: string;
+  failure_reason: string | null;
   created_at?: string;
+  processed_at?: string | null;
 }
 
-// Maps from scores table
+// Row from scores
 export interface FighterScore {
   id: string;
+  membership_id: string;
   bout_id: string;
   fighter_id: string;
   points: number;
@@ -111,6 +154,7 @@ export interface FighterScore {
 
 export interface RosterSlot extends Roster {
   fighter: Fighter;
+  slot_type: string;  // display name derived from slot code
   next_bout: (Bout & { event: Event }) | null;
   is_locked: boolean;
 }
@@ -119,7 +163,6 @@ export interface BoutWithFighters extends Bout {
   fighter_a: Fighter;
   fighter_b: Fighter;
   event?: Event;
-  scores?: FighterScore[];
 }
 
 export interface EventWithBouts extends Event {
@@ -132,13 +175,6 @@ export interface ManagerWithRoster extends Manager {
   completed_fighters?: number;
 }
 
-export interface FighterWithHistory extends Fighter {
-  bouts: (BoutWithFighters & {
-    score?: FighterScore;
-    is_locked: boolean;
-  })[];
-}
-
 export interface WaiverBidWithFighters extends WaiverBid {
   add_fighter: Fighter;
   drop_fighter: Fighter;
@@ -146,31 +182,4 @@ export interface WaiverBidWithFighters extends WaiverBid {
 
 // ─── UI State Types ──────────────────────────────────────────────────────────
 
-export type ModalType =
-  | { type: 'fighter'; fighter_id: string }
-  | { type: 'event'; event_id: string }
-  | { type: 'transfer'; add_fighter: Fighter }
-  | { type: 'season-chart' }
-  | { type: 'transfer-history' }
-  | { type: 'opponent-roster'; manager_id: string };
-
 export type TabRoute = 'roster' | 'fights' | 'standings' | 'market' | 'settings';
-
-export const WEIGHT_CLASSES = [
-  'Strawweight',
-  'Flyweight',
-  'Bantamweight',
-  'Featherweight',
-  'Lightweight',
-  'Welterweight',
-  'Middleweight',
-  'Light Heavyweight',
-  'Heavyweight',
-] as const;
-
-export type WeightClass = (typeof WEIGHT_CLASSES)[number];
-
-export const ROSTER_SLOTS: string[] = [
-  ...WEIGHT_CLASSES,
-  'Wildcard',
-];

@@ -24,6 +24,17 @@ export default function SlideUpModal({
   // Keep the sheet mounted during the closing animation so it can slide away.
   const [render, setRender] = useState(isOpen);
   const [closing, setClosing] = useState(false);
+  // Adjust state during render when the isOpen prop flips (avoids effect-driven setState).
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (prevOpen !== isOpen) {
+    setPrevOpen(isOpen);
+    if (isOpen) {
+      setRender(true);
+      setClosing(false);
+    } else if (render) {
+      setClosing(true);
+    }
+  }
 
   // Handle swipe-to-dismiss
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -53,17 +64,15 @@ export default function SlideUpModal({
     }
   };
 
-  // Drive mount/unmount + exit animation off the isOpen prop.
+  // Unmount after the exit animation finishes.
   useEffect(() => {
-    if (isOpen) {
-      setRender(true);
+    if (!closing) return;
+    const t = setTimeout(() => {
+      setRender(false);
       setClosing(false);
-    } else if (render) {
-      setClosing(true);
-      const t = setTimeout(() => setRender(false), 250);
-      return () => clearTimeout(t);
-    }
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, 250);
+    return () => clearTimeout(t);
+  }, [closing]);
 
   // Lock body scroll + close on Escape while open
   useEffect(() => {

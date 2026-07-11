@@ -2,11 +2,13 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getUserId } from '@/lib/identity';
 import { EventWithBouts, BoutWithFighters, Bout } from '@/lib/types';
+import { BOUT_WITH_FIGHTERS_SELECT, cardOrder, formatEventDate } from '@/lib/helpers';
+import { fetchOwnershipMap } from '@/lib/data';
 import LiveMatchup from '@/components/LiveMatchup';
 import EventDetailModal from '@/components/EventDetailModal';
 
@@ -14,84 +16,86 @@ interface FightsPageProps {
   params: Promise<{ id: string }>;
 }
 
+const EVENT_SELECT = `*, bouts(${BOUT_WITH_FIGHTERS_SELECT})`;
+
 export default function FightsPage({ params }: FightsPageProps) {
   const { id: leagueId } = use(params);
   const [events, setEvents] = useState<EventWithBouts[]>([]);
+  const [owners, setOwners] = useState<Record<string, string>>({});
   const [myFighterIds, setMyFighterIds] = useState<string[]>([]);
-  const [allRosteredIds, setAllRosteredIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const supabase = createClient();
 
-  const loadData = useCallback(async () => {
-    const userId = getUserId();
-    if (!userId) return;
-
-    // My fighter IDs
-    const { data: myMembership } = await supabase
-      .from('league_memberships')
-      .select('id')
-      .eq('league_id', leagueId)
-      .eq('user_id', userId)
-      .single();
-
-    let myIds: string[] = [];
-    if (myMembership) {
-      const { data: myRoster } = await supabase
-        .from('rosters')
-        .select('fighter_id')
-        .eq('membership_id', myMembership.id);
-      myIds = (myRoster ?? []).map((r: { fighter_id: string }) => r.fighter_id);
-    }
-
-    // All league rostered IDs
-    const { data: allMemberships } = await supabase
-      .from('league_memberships')
-      .select('id')
-      .eq('league_id', leagueId);
-
-    const membershipIds = (allMemberships ?? []).map((m: { id: string }) => m.id);
-    let allIds: string[] = [];
-    if (membershipIds.length > 0) {
-      const { data: allRosters } = await supabase
-        .from('rosters')
-        .select('fighter_id')
-        .in('membership_id', membershipIds);
-      allIds = (allRosters ?? []).map((r: { fighter_id: string }) => r.fighter_id);
-    }
-
-    // Fetch events with bouts
-    const { data: eventsData } = await supabase
-      .from('events')
-      .select(`
-        *,
-        bouts(
-          *,
-          fighter_a:fighters!bouts_fighter_a_id_fkey(*),
-          fighter_b:fighters!bouts_fighter_b_id_fkey(*)
-        )
-      `)
-      .order('event_date', { ascending: false })
-      .limit(10);
-
-    const enrichedEvents: EventWithBouts[] = (eventsData ?? []).map((ev) => {
-      const bouts = (ev.bouts ?? []) as BoutWithFighters[];
-      const rosteredCount = bouts.filter(
-        (b) => allIds.includes(b.fighter_a_id) || allIds.includes(b.fighter_b_id)
-      ).length;
-      return { ...ev, bouts, rostered_count: rosteredCount };
-    });
-
-    setMyFighterIds(myIds);
-    setAllRosteredIds(allIds);
-    setEvents(enrichedEvents);
-    setLoading(false);
-  }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
+    async function loadData() {
+      const userId = getUserId();
+      if (!userId) return;
+
+      const yesterday = new Date(Date.now() - 86400000).toISOString();
+
+      const [{ owners: ownerMap }, myMembershipRes, liveRes, upcomingRes, recentRes] =
+        await Promise.all([
+          fetchOwnershipMap(supabase, leagueId),
+          supabase
+            .from('league_memberships')
+            .select('id')
+            .eq('league_id', leagueId)
+            .eq('user_id', userId)
+            .single(),
+          supabase
+            .from('events')
+            .select(EVENT_SELECT)
+            .eq('status', 'in_progress')
+            .order('event_date', { ascending: true }),
+          supabase
+            .from('events')
+            .select(EVENT_SELECT)
+            .eq('status', 'scheduled')
+            .gte('event_date', yesterday)
+            .order('event_date', { ascending: true })
+            .limit(5),
+          supabase
+            .from('events')
+            .select(EVENT_SELECT)
+            .eq('status', 'completed')
+            .order('event_date', { ascending: false })
+            .limit(6),
+        ]);
+
+      let myIds: string[] = [];
+      if (myMembershipRes.data) {
+        const { data: myRoster } = await supabase
+          .from('rosters')
+          .select('fighter_id')
+          .eq('membership_id', myMembershipRes.data.id);
+        myIds = (myRoster ?? []).map((r: { fighter_id: string }) => r.fighter_id);
+      }
+
+      const enrich = (rows: unknown): EventWithBouts[] =>
+        ((rows as EventWithBouts[]) ?? []).map((ev) => {
+          const bouts = ((ev.bouts ?? []) as BoutWithFighters[])
+            .filter((b) => b.status !== 'cancelled')
+            .sort(cardOrder);
+          const rosteredCount = bouts.filter(
+            (b) => ownerMap[b.fighter_a_id] || ownerMap[b.fighter_b_id]
+          ).length;
+          return { ...ev, bouts, rostered_count: rosteredCount };
+        });
+
+      setOwners(ownerMap);
+      setMyFighterIds(myIds);
+      setEvents([
+        ...enrich(liveRes.data),
+        ...enrich(upcomingRes.data),
+        ...enrich(recentRes.data),
+      ]);
+      setLoading(false);
+    }
+
     loadData();
 
-    // Realtime subscription on bouts table
+    // Live updates: refresh bout rows in place as results land.
     const channel = supabase
       .channel('bouts-realtime')
       .on(
@@ -112,10 +116,10 @@ export default function FightsPage({ params }: FightsPageProps) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [loadData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const liveEvents = events.filter((e) => e.status === 'live');
-  const upcomingEvents = events.filter((e) => e.status === 'upcoming');
+  const liveEvents = events.filter((e) => e.status === 'in_progress');
+  const upcomingEvents = events.filter((e) => e.status === 'scheduled');
   const completedEvents = events.filter((e) => e.status === 'completed');
 
   function renderSection(title: string, evs: EventWithBouts[], colorClass: string) {
@@ -130,32 +134,41 @@ export default function FightsPage({ params }: FightsPageProps) {
           {evs.map((ev) => (
             <div key={ev.id}>
               {/* Event header */}
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[12px] font-black uppercase tracking-tighter text-zinc-400">
-                  {ev.title}
-                </h3>
-                <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">
-                  {new Date(ev.event_date).toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric',
-                  })}
-                </span>
-              </div>
+              <button
+                onClick={() => setSelectedEventId(ev.id)}
+                className="w-full flex items-center justify-between mb-2 text-left"
+              >
+                <div className="min-w-0">
+                  <h3 className="text-[12px] font-black uppercase tracking-tighter text-zinc-300 truncate">
+                    {ev.name}
+                  </h3>
+                  {ev.location && (
+                    <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">
+                      {ev.location}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right flex-shrink-0 ml-2">
+                  <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">
+                    {formatEventDate(ev.event_date)}
+                  </span>
+                  {(ev.rostered_count ?? 0) > 0 && (
+                    <span className="text-[9px] font-black text-emerald-500/80 uppercase tracking-widest">
+                      {ev.rostered_count} league {ev.rostered_count === 1 ? 'fight' : 'fights'}
+                    </span>
+                  )}
+                </div>
+              </button>
               <div className="space-y-2">
-                {ev.bouts
-                  .sort((a, b) => (b.is_main_event ? 1 : 0) - (a.is_main_event ? 1 : 0))
-                  .map((bout) => (
-                    <LiveMatchup
-                      key={bout.id}
-                      bout={{ ...bout, event: ev }}
-                      rosteredCount={
-                        [bout.fighter_a_id, bout.fighter_b_id].filter((fid) =>
-                          allRosteredIds.includes(fid)
-                        ).length
-                      }
-                      currentManagerFighterIds={myFighterIds}
-                      onClick={() => setSelectedEventId(ev.id)}
-                    />
-                  ))}
+                {ev.bouts.map((bout) => (
+                  <LiveMatchup
+                    key={bout.id}
+                    bout={{ ...bout, event: ev }}
+                    owners={owners}
+                    currentManagerFighterIds={myFighterIds}
+                    onClick={() => setSelectedEventId(ev.id)}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -179,7 +192,7 @@ export default function FightsPage({ params }: FightsPageProps) {
           <>
             {renderSection('Live', liveEvents, 'text-purple-400')}
             {renderSection('Upcoming', upcomingEvents, 'text-blue-400')}
-            {renderSection('Completed', completedEvents, 'text-zinc-500')}
+            {renderSection('Recent Results', completedEvents, 'text-zinc-500')}
             {events.length === 0 && (
               <p className="text-zinc-600 text-[12px] font-black uppercase tracking-widest text-center py-16">
                 No events scheduled

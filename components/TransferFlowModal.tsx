@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Fighter, RosterSlot, SLOT_DISPLAY } from '@/lib/types';
+import { Fighter, RosterSlot } from '@/lib/types';
+import { currentWaiverPeriod, recordString, weightClassName } from '@/lib/helpers';
+import { fetchRosterSlots } from '@/lib/data';
 import SlideUpModal from './SlideUpModal';
 import { FighterAvatar } from '@/components/FighterAvatar';
 
@@ -27,77 +29,43 @@ export default function TransferFlowModal({
   const [selectedDrop, setSelectedDrop] = useState<RosterSlot | null>(null);
   const [existingBidCount, setExistingBidCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Loading is derived: done once we've loaded for the currently-requested fighter.
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const loading = loadedId !== (addFighter?.id ?? null);
   const supabase = createClient();
 
   useEffect(() => {
-    if (!addFighter || !isOpen) return;
-    setSelectedDrop(null);
-    setError(null);
-    setLoading(true);
+    if (!addFighter || !isOpen || !membershipId) return;
 
     async function load() {
-      const [{ data: rostersData }, { data: bids }] = await Promise.all([
-        supabase.from('rosters').select('*, fighter:fighters(*)').eq('membership_id', membershipId),
+      const [enriched, { data: bids }] = await Promise.all([
+        fetchRosterSlots(supabase, membershipId),
         supabase.from('waiver_claims').select('id').eq('membership_id', membershipId).eq('status', 'pending'),
       ]);
 
-      const fighterIds = (rostersData ?? []).map((r) => r.fighter_id);
-
-      type BoutRow = { id: string; fighter_a_id: string; fighter_b_id: string; event?: { event_date: string } | null };
-      let allBouts: BoutRow[] = [];
-      if (fighterIds.length > 0) {
-        const { data } = await supabase
-          .from('bouts')
-          .select('*, event:events(*)')
-          .or(fighterIds.map((id) => `fighter_a_id.eq.${id},fighter_b_id.eq.${id}`).join(','))
-          .order('created_at', { ascending: false });
-        allBouts = (data ?? []) as BoutRow[];
-      }
-
-      const boutByFighter = new Map<string, BoutRow>();
-      for (const bout of allBouts) {
-        for (const fid of [bout.fighter_a_id, bout.fighter_b_id]) {
-          if (fighterIds.includes(fid) && !boutByFighter.has(fid)) {
-            boutByFighter.set(fid, bout);
-          }
-        }
-      }
-
-      const now = new Date();
-      const enriched: RosterSlot[] = (rostersData ?? []).map((r) => {
-        const boutData = boutByFighter.get(r.fighter_id) ?? null;
-        const eventStart = boutData?.event?.event_date ? new Date(boutData.event.event_date) : null;
-        return {
-          ...r,
-          slot_type: SLOT_DISPLAY[r.slot] ?? r.slot,
-          next_bout: boutData ?? null,
-          is_locked: !!eventStart && eventStart <= now,
-        } as RosterSlot;
-      });
-
-      const weightMatch = enriched.find((s) => s.slot_type === addFighter!.weight_class);
-      const wildcardSlot = enriched.find((s) => s.slot_type === 'Wildcard');
+      // The new fighter can replace the matching weight-class slot or the wildcard.
+      const weightMatch = enriched.find((s) => s.slot === addFighter!.weight_class && !s.is_locked);
+      const wildcardSlot = enriched.find((s) => s.slot === 'WILDCARD' && !s.is_locked);
       setSelectedDrop(weightMatch ?? wildcardSlot ?? null);
       setRosterSlots(enriched);
       setExistingBidCount((bids ?? []).length);
-      setLoading(false);
+      setError(null);
+      setLoadedId(addFighter!.id);
     }
 
     load();
-  }, [addFighter, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [addFighter, isOpen, membershipId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const bothLocked =
-    rosterSlots.length > 0 &&
-    rosterSlots
-      .filter((s) => s.slot_type === addFighter?.weight_class || s.slot_type === 'Wildcard')
-      .every((s) => s.is_locked);
+  const dropCandidates = rosterSlots
+    .filter((s) => s.slot === addFighter?.weight_class || s.slot === 'WILDCARD')
+    .sort((a, b) => (a.slot === 'WILDCARD' ? 1 : 0) - (b.slot === 'WILDCARD' ? 1 : 0));
 
+  const allLocked = dropCandidates.length > 0 && dropCandidates.every((s) => s.is_locked);
   const prioritySlot = Math.min(existingBidCount + 1, 2) as 1 | 2;
 
   async function handleSubmit() {
-    if (!selectedDrop || !addFighter || bothLocked || submitting) return;
+    if (!selectedDrop || !addFighter || allLocked || submitting) return;
     if (existingBidCount >= 2) {
       setError('Maximum 2 bids allowed per week.');
       return;
@@ -110,6 +78,8 @@ export default function TransferFlowModal({
       drop_fighter_id: selectedDrop.fighter_id,
       bid_priority: prioritySlot,
       status: 'pending',
+      slot: selectedDrop.slot,
+      period: currentWaiverPeriod(),
     });
     setSubmitting(false);
     if (err) {
@@ -121,10 +91,6 @@ export default function TransferFlowModal({
   }
 
   if (!addFighter) return null;
-
-  const dropCandidates = rosterSlots.filter(
-    (s) => s.slot_type === addFighter.weight_class || s.slot_type === 'Wildcard'
-  );
 
   return (
     <SlideUpModal isOpen={isOpen} onClose={onClose} heightClass="h-[82vh]">
@@ -150,7 +116,10 @@ export default function TransferFlowModal({
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Adding</span>
                   <span className="text-[10px] font-bold text-zinc-500 tracking-widest">
-                    {addFighter.wins}-{addFighter.losses}-{addFighter.draws}
+                    {recordString(addFighter)}
+                  </span>
+                  <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">
+                    {weightClassName(addFighter.weight_class)}
                   </span>
                 </div>
               </div>
@@ -160,10 +129,16 @@ export default function TransferFlowModal({
               Select Fighter to Drop
             </p>
 
-            {bothLocked && (
+            {dropCandidates.length === 0 && (
+              <p className="text-[11px] font-black text-zinc-500 uppercase tracking-widest text-center py-6">
+                No eligible roster slot for this weight class
+              </p>
+            )}
+
+            {allLocked && (
               <div className="bg-rose-950/30 border-2 border-rose-800/50 rounded-xl p-3 mb-4">
                 <p className="text-[11px] font-black text-rose-400 uppercase tracking-widest text-center">
-                  Lineup Lock: Selected fighters are already locked in live events.
+                  Lineup Lock: eligible fighters are locked into live events.
                 </p>
               </div>
             )}
@@ -195,7 +170,7 @@ export default function TransferFlowModal({
                           {slot.fighter.name}
                         </span>
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                          {slot.slot_type}
+                          {slot.slot_type} • {recordString(slot.fighter)}
                           {slot.is_locked && ' • LOCKED'}
                         </span>
                       </div>
@@ -225,7 +200,7 @@ export default function TransferFlowModal({
 
             <button
               onClick={handleSubmit}
-              disabled={!selectedDrop || bothLocked || submitting || existingBidCount >= 2}
+              disabled={!selectedDrop || allLocked || submitting || existingBidCount >= 2}
               className="w-full bg-emerald-600 border border-emerald-500 text-white font-black uppercase tracking-widest text-[13px] py-3.5 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? 'Submitting…' : `Submit Priority ${prioritySlot} Bid`}

@@ -2,6 +2,7 @@
 
 import { RosterSlot } from '@/lib/types';
 import { FighterAvatar } from '@/components/FighterAvatar';
+import { isEventLocked, rankLabel } from '@/lib/helpers';
 
 interface RosterCardProps {
   slot: RosterSlot;
@@ -25,87 +26,23 @@ function formatEventBadge(slot: RosterSlot): { label: string; color: string } | 
 
   const now = new Date();
   const start = new Date(event.event_date);
-  const diffMs = start.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (event.status === 'live') {
-    return { label: `LIVE • ${event.title}`, color: 'bg-purple-900/20 border-purple-800/50 text-purple-400' };
-  }
-  if (event.status === 'completed') {
-    return { label: `COMPLETED • ${event.title}`, color: 'bg-zinc-900/60 border-zinc-700/50 text-zinc-500' };
+  if (isEventLocked(event, now)) {
+    return { label: `LIVE • ${event.name}`, color: 'bg-purple-900/20 border-purple-800/50 text-purple-400' };
   }
   const dayLabel = diffDays <= 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : `In ${diffDays} Days`;
-  return { label: `${event.title} • ${dayLabel}`, color: 'bg-blue-900/20 border-blue-800/50 text-blue-400' };
-}
-
-function rankLabel(rank: number | null) {
-  if (rank === null) return null;
-  if (rank === 0) return 'C';
-  return `#${rank}`;
-}
-
-export default function RosterCard({ slot, onClick }: RosterCardProps) {
-  const fighter = slot.fighter;
-  const badge = formatEventBadge(slot);
-  const rank = rankLabel(fighter.official_rank);
-
-  return (
-    <button
-      onClick={onClick}
-      className="relative w-full bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 flex items-center shadow-lg active:scale-[0.98] transition-transform text-left"
-    >
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-zinc-900 border-x border-b border-zinc-700 px-4 py-1 rounded-b text-[10px] font-black uppercase tracking-widest text-zinc-300 whitespace-nowrap">
-        {slot.slot_type}
-      </div>
-
-      <div className="flex items-center space-x-4 mt-3 flex-1 min-w-0">
-        <div className="relative flex-shrink-0">
-          <FighterAvatar fighter={fighter} size={56} className="border-[3px] border-zinc-700 shadow-inner" />
-          {rank && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 bg-black border border-zinc-700 text-white text-[10px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap">
-              {rank}
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col min-w-0">
-          <h3 className="font-black tracking-tighter text-[15px] text-white uppercase leading-none mt-1 truncate">
-            {fighter.name}
-          </h3>
-          {fighter.nickname && (
-            <span className="text-[10px] font-black italic text-zinc-500 uppercase mt-0.5 truncate">
-              &quot;{fighter.nickname}&quot;
-            </span>
-          )}
-          <div className="mt-1.5 flex items-center space-x-1.5">
-            {badge && (
-              <span className={`border text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest w-max ${badge.color}`}>
-                {badge.label}
-              </span>
-            )}
-            {slot.is_locked && <LockIcon />}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-3 border-l-2 border-zinc-800 pl-4 py-1 text-right flex-shrink-0 ml-2">
-        <span className="block text-[28px] font-black text-zinc-600 tracking-tighter leading-none font-mono tabular-nums">
-          —
-        </span>
-        <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-black">PTS</span>
-      </div>
-    </button>
-  );
+  return { label: `${event.name} • ${dayLabel}`, color: 'bg-blue-900/20 border-blue-800/50 text-blue-400' };
 }
 
 interface RosterCardWithPointsProps extends RosterCardProps {
-  points: number;
+  points?: number;
 }
 
 export function RosterCardWithPoints({ slot, onClick, points }: RosterCardWithPointsProps) {
   const fighter = slot.fighter;
   const badge = formatEventBadge(slot);
-  const rank = rankLabel(fighter.official_rank);
+  const rank = rankLabel(fighter);
 
   return (
     <button
@@ -137,7 +74,7 @@ export function RosterCardWithPoints({ slot, onClick, points }: RosterCardWithPo
           )}
           <div className="mt-1.5 flex items-center space-x-1.5">
             {badge && (
-              <span className={`border text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest w-max ${badge.color}`}>
+              <span className={`border text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest w-max truncate max-w-[180px] ${badge.color}`}>
                 {badge.label}
               </span>
             )}
@@ -147,13 +84,17 @@ export function RosterCardWithPoints({ slot, onClick, points }: RosterCardWithPo
       </div>
 
       <div className="mt-3 border-l-2 border-zinc-800 pl-4 py-1 text-right flex-shrink-0 ml-2">
-        <span className="block text-[28px] font-black text-white tracking-tighter leading-none font-mono tabular-nums">
-          {points}
+        <span className={`block text-[28px] font-black tracking-tighter leading-none font-mono tabular-nums ${points === undefined ? 'text-zinc-600' : 'text-white'}`}>
+          {points === undefined ? '—' : points}
         </span>
         <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-black">PTS</span>
       </div>
     </button>
   );
+}
+
+export default function RosterCard(props: RosterCardProps) {
+  return <RosterCardWithPoints {...props} />;
 }
 
 export function RosterCardSkeleton() {

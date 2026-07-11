@@ -19,13 +19,12 @@ interface TransferHistoryModalProps {
 }
 
 export default function TransferHistoryModal({ leagueId, isOpen, onClose }: TransferHistoryModalProps) {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  // null = not yet loaded (loading); refreshed on every open.
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
     if (!isOpen) return;
-    setLoading(true);
 
     async function load() {
       const { data } = await supabase
@@ -41,7 +40,6 @@ export default function TransferHistoryModal({ leagueId, isOpen, onClose }: Tran
         .order('created_at', { ascending: false });
 
       setHistory((data as HistoryEntry[]) ?? []);
-      setLoading(false);
     }
 
     load();
@@ -56,7 +54,7 @@ export default function TransferHistoryModal({ leagueId, isOpen, onClose }: Tran
           </div>
         </div>
 
-        {loading ? (
+        {!history ? (
           <div className="flex items-center justify-center h-32">
             <div className="w-6 h-6 rounded-full border-2 border-zinc-700 border-t-white animate-spin" />
           </div>

@@ -17,7 +17,7 @@ const SIZE_CLASS: Record<number, string> = {
 };
 
 interface FighterAvatarProps {
-  fighter: Pick<Fighter, 'name' | 'image_url'>;
+  fighter: Pick<Fighter, 'name' | 'photo_url'>;
   size: 24 | 32 | 40 | 44 | 48 | 56 | 80;
   className?: string;
 }
@@ -35,9 +35,9 @@ export function FighterAvatar({ fighter, size, className = '' }: FighterAvatarPr
       className={`relative rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center flex-shrink-0 ${sizeClass} ${className}`}
     >
       <span className="text-zinc-500 font-black text-[9px] select-none">{initials}</span>
-      {fighter.image_url && (
+      {fighter.photo_url && (
         <Image
-          src={fighter.image_url}
+          src={fighter.photo_url}
           alt={fighter.name}
           fill
           sizes={`${size}px`}

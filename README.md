@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# UFC Fantasy League
 
-## Getting Started
+A mobile-first fantasy UFC app for a private league. Each manager fields a
+9-slot roster (one fighter per male division plus a wildcard), scores points
+when their fighters win, and adds free agents through a weekly waiver wire.
 
-First, run the development server:
+Built with Next.js (App Router) + Supabase. No authentication — players pick
+who they are once and the choice is stored in a cookie (`lib/identity.ts`).
+
+## Pages
+
+| Tab | What it shows |
+| --- | --- |
+| **Roster** | Your 9 slots, points per fighter, next bout + lineup-lock state |
+| **Fights** | Live / upcoming / recent events with every bout tagged by owning team |
+| **Standings** | League table, tap a team to inspect their roster, season chart |
+| **Market** | Free agents with search, weight-class filter, and sorting (fights soon / rank / rating / A–Z); submit up to 2 waiver bids |
+| **Settings** | Scoring + waiver rules, switch player, commissioner tools |
+
+## Scoring
+
+Win **+100** · Finish **+50** · Ranked opponent **+50** · POTN/FOTN **+50** ·
+Main event **+25** · Title fight **+25** (bonuses other than POTN/FOTN require the win).
+
+Scores are computed in Postgres: a trigger (`trg_score_bout`) scores every
+rostered fighter the moment a bout is marked completed, and
+`recompute_league_scores(league_id)` rebuilds a league from scratch
+(commissioner → Settings → *Recalculate Scores*).
+
+## Waiver wire
+
+Managers submit up to two prioritized add/drop claims. `process_waivers(league_id)`
+awards claims worst-team-first (lowest total points), enforcing weight-class/slot
+fit, fighter availability, lineup locks, and one successful claim per manager
+per run. Run it from Settings (*Force Process Waivers*) or schedule it
+(e.g. Supabase cron) for Monday midnight ET.
+
+SQL for both lives in [`supabase/waivers-and-scoring.sql`](supabase/waivers-and-scoring.sql)
+and is applied to the live project as the `waivers_and_scoring` migration.
+
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Requires `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in
+`.env.local`.

@@ -71,13 +71,33 @@ export default function SettingsPage({ params }: SettingsPageProps) {
     setProcessing(true);
     setErrorMsg('');
     setSuccessMsg('');
-    const { error } = await supabase.rpc('process_waivers', { p_league_id: leagueId });
+    const { data, error } = await supabase.rpc('process_waivers', { p_league_id: leagueId });
     setProcessing(false);
     if (error) {
       setErrorMsg(error.message);
       setTimeout(() => setErrorMsg(''), 5000);
     } else {
-      setSuccessMsg('Waivers processed successfully.');
+      const summary = data as { won?: number; lost?: number; invalid?: number } | null;
+      setSuccessMsg(
+        summary && typeof summary.won === 'number'
+          ? `Waivers processed: ${summary.won} won, ${(summary.lost ?? 0) + (summary.invalid ?? 0)} rejected.`
+          : 'Waivers processed successfully.'
+      );
+      setTimeout(() => setSuccessMsg(''), 6000);
+    }
+  }
+
+  async function recalcScores() {
+    setProcessing(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    const { error } = await supabase.rpc('recompute_league_scores', { p_league_id: leagueId });
+    setProcessing(false);
+    if (error) {
+      setErrorMsg(error.message);
+      setTimeout(() => setErrorMsg(''), 5000);
+    } else {
+      setSuccessMsg('Scores recalculated from completed bouts.');
       setTimeout(() => setSuccessMsg(''), 4000);
     }
   }
@@ -151,6 +171,13 @@ export default function SettingsPage({ params }: SettingsPageProps) {
               className="w-full bg-amber-600/20 border-2 border-amber-700/50 text-amber-400 font-black uppercase tracking-widest text-[12px] py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40"
             >
               {processing ? 'Processing…' : 'Force Process Waivers'}
+            </button>
+            <button
+              onClick={recalcScores}
+              disabled={processing}
+              className="w-full bg-blue-600/20 border-2 border-blue-700/50 text-blue-400 font-black uppercase tracking-widest text-[12px] py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40"
+            >
+              {processing ? 'Processing…' : 'Recalculate Scores'}
             </button>
           </div>
         </div>

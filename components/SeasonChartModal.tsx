@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Manager } from '@/lib/types';
 import SlideUpModal from './SlideUpModal';
 
-interface EventSnapshot {
+export interface EventSnapshot {
   eventTitle: string;
   managerPoints: Record<string, number>; // manager_id → cumulative points after this event
 }
