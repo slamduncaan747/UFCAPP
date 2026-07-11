@@ -44,12 +44,22 @@ export function wasPerformanceBonus(bout: Bout, fighterId: string): boolean {
 
 const SEGMENT_RANK: Record<CardSegment, number> = { main: 2, prelim: 1, early_prelim: 0 };
 
-/** Sort bouts as they appear on a fight card: main event → main card → prelims. */
+/**
+ * Sort bouts as they appear on a fight card: main event → main card → prelims.
+ * The data feed often leaves bout_order/is_main_event unset, so fall back to
+ * title fights and ranked matchups first.
+ */
 export function cardOrder(a: Bout, b: Bout): number {
   if (a.is_main_event !== b.is_main_event) return a.is_main_event ? -1 : 1;
   const seg = (SEGMENT_RANK[b.card_segment] ?? 0) - (SEGMENT_RANK[a.card_segment] ?? 0);
   if (seg !== 0) return seg;
-  return (b.bout_order ?? 0) - (a.bout_order ?? 0);
+  const order = (b.bout_order ?? 0) - (a.bout_order ?? 0);
+  if (order !== 0) return order;
+  if (a.is_title_fight !== b.is_title_fight) return a.is_title_fight ? -1 : 1;
+  const aRanked = a.fighter_a_ranked || a.fighter_b_ranked;
+  const bRanked = b.fighter_a_ranked || b.fighter_b_ranked;
+  if (aRanked !== bRanked) return aRanked ? -1 : 1;
+  return 0;
 }
 
 export function segmentLabel(segment: CardSegment): string {

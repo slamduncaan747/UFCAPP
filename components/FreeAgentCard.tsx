@@ -37,6 +37,11 @@ export default function FreeAgentCard({ fighter, nextBout, onAdd, disabled = fal
             <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest whitespace-nowrap">
               {weightClassName(fighter.weight_class)}
             </span>
+            {fighter.draft_score !== null && (
+              <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest whitespace-nowrap">
+                RTG {Math.round(fighter.draft_score)}
+              </span>
+            )}
           </div>
           {nextBout && (
             <span className="inline-block text-[10px] font-black text-blue-400 bg-blue-900/20 border border-blue-800/40 px-1.5 py-0.5 rounded uppercase tracking-wider mt-1 truncate max-w-full">

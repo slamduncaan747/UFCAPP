@@ -31,9 +31,10 @@ rostered fighter the moment a bout is marked completed, and
 
 Managers submit up to two prioritized add/drop claims. `process_waivers(league_id)`
 awards claims worst-team-first (lowest total points), enforcing weight-class/slot
-fit, fighter availability, lineup locks, and one successful claim per manager
-per run. Run it from Settings (*Force Process Waivers*) or schedule it
-(e.g. Supabase cron) for Monday midnight ET.
+fit, fighter availability, lineup locks (on both sides of the swap), and one
+successful claim per manager per run. A `pg_cron` job (`process-waivers-weekly`)
+runs it automatically every Tuesday 05:00 UTC (Monday midnight ET); the
+commissioner can also force a run from Settings.
 
 SQL for both lives in [`supabase/waivers-and-scoring.sql`](supabase/waivers-and-scoring.sql)
 and is applied to the live project as the `waivers_and_scoring` migration.

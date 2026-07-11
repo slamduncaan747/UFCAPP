@@ -27,7 +27,7 @@ export default function TransferFlowModal({
 }: TransferFlowModalProps) {
   const [rosterSlots, setRosterSlots] = useState<RosterSlot[]>([]);
   const [selectedDrop, setSelectedDrop] = useState<RosterSlot | null>(null);
-  const [existingBidCount, setExistingBidCount] = useState(0);
+  const [takenPriorities, setTakenPriorities] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Loading is derived: done once we've loaded for the currently-requested fighter.
@@ -41,7 +41,7 @@ export default function TransferFlowModal({
     async function load() {
       const [enriched, { data: bids }] = await Promise.all([
         fetchRosterSlots(supabase, membershipId),
-        supabase.from('waiver_claims').select('id').eq('membership_id', membershipId).eq('status', 'pending'),
+        supabase.from('waiver_claims').select('bid_priority').eq('membership_id', membershipId).eq('status', 'pending'),
       ]);
 
       // The new fighter can replace the matching weight-class slot or the wildcard.
@@ -49,7 +49,7 @@ export default function TransferFlowModal({
       const wildcardSlot = enriched.find((s) => s.slot === 'WILDCARD' && !s.is_locked);
       setSelectedDrop(weightMatch ?? wildcardSlot ?? null);
       setRosterSlots(enriched);
-      setExistingBidCount((bids ?? []).length);
+      setTakenPriorities(((bids as Array<{ bid_priority: number }>) ?? []).map((b) => b.bid_priority));
       setError(null);
       setLoadedId(addFighter!.id);
     }
@@ -62,11 +62,12 @@ export default function TransferFlowModal({
     .sort((a, b) => (a.slot === 'WILDCARD' ? 1 : 0) - (b.slot === 'WILDCARD' ? 1 : 0));
 
   const allLocked = dropCandidates.length > 0 && dropCandidates.every((s) => s.is_locked);
-  const prioritySlot = Math.min(existingBidCount + 1, 2) as 1 | 2;
+  // Take the lowest free priority slot (so cancelling bid 1 frees it up again).
+  const prioritySlot: 1 | 2 | null = !takenPriorities.includes(1) ? 1 : !takenPriorities.includes(2) ? 2 : null;
 
   async function handleSubmit() {
     if (!selectedDrop || !addFighter || allLocked || submitting) return;
-    if (existingBidCount >= 2) {
+    if (prioritySlot === null) {
       setError('Maximum 2 bids allowed per week.');
       return;
     }
@@ -195,15 +196,19 @@ export default function TransferFlowModal({
 
             <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-3">
               <span>Priority Slot</span>
-              <span className="text-white">{prioritySlot} of 2</span>
+              <span className="text-white">{prioritySlot ?? '—'} of 2</span>
             </div>
 
             <button
               onClick={handleSubmit}
-              disabled={!selectedDrop || allLocked || submitting || existingBidCount >= 2}
+              disabled={!selectedDrop || allLocked || submitting || prioritySlot === null}
               className="w-full bg-emerald-600 border border-emerald-500 text-white font-black uppercase tracking-widest text-[13px] py-3.5 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {submitting ? 'Submitting…' : `Submit Priority ${prioritySlot} Bid`}
+              {submitting
+                ? 'Submitting…'
+                : prioritySlot === null
+                ? 'Bid Limit Reached'
+                : `Submit Priority ${prioritySlot} Bid`}
             </button>
           </>
         )}

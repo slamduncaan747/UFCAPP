@@ -100,10 +100,31 @@ AFTER INSERT OR UPDATE OF status, winner_id, method, is_finish, end_round, fotn,
 ON public.bouts
 FOR EACH ROW EXECUTE FUNCTION public.score_bout_trigger();
 
+-- ─── Query indexes for the app's hot paths ───────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_bouts_fighter_a ON public.bouts (fighter_a_id);
+CREATE INDEX IF NOT EXISTS idx_bouts_fighter_b ON public.bouts (fighter_b_id);
+CREATE INDEX IF NOT EXISTS idx_bouts_event ON public.bouts (event_id);
+CREATE INDEX IF NOT EXISTS idx_rosters_membership ON public.rosters (membership_id);
+CREATE INDEX IF NOT EXISTS idx_rosters_league_fighter ON public.rosters (league_id, fighter_id);
+CREATE INDEX IF NOT EXISTS idx_scores_membership ON public.scores (membership_id);
+CREATE INDEX IF NOT EXISTS idx_scores_bout ON public.scores (bout_id);
+CREATE INDEX IF NOT EXISTS idx_scores_fighter ON public.scores (fighter_id);
+CREATE INDEX IF NOT EXISTS idx_waiver_claims_league_status ON public.waiver_claims (league_id, status);
+CREATE INDEX IF NOT EXISTS idx_waiver_claims_membership_status ON public.waiver_claims (membership_id, status);
+CREATE INDEX IF NOT EXISTS idx_memberships_league ON public.league_memberships (league_id);
+CREATE INDEX IF NOT EXISTS idx_memberships_user ON public.league_memberships (user_id);
+CREATE INDEX IF NOT EXISTS idx_events_status_date ON public.events (status, event_date);
+CREATE INDEX IF NOT EXISTS idx_fighters_status ON public.fighters (status);
+
+-- One pending claim per fighter per manager (cancel-and-rebid still works).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_waiver_pending_add
+  ON public.waiver_claims (membership_id, add_fighter_id) WHERE status = 'pending';
+
 -- ─── Waiver processing ───────────────────────────────────────────────────────
 -- Priority: lowest total points first (worst team gets first pick), ties by
--- earliest join. One successful claim per manager per run. Called by the
--- commissioner from Settings ("Force Process Waivers") or on a schedule.
+-- earliest join. One successful claim per manager per run. Runs automatically
+-- via pg_cron every Tuesday 05:00 UTC (Monday midnight ET); the commissioner
+-- can also force a run from Settings.
 CREATE OR REPLACE FUNCTION public.process_waivers(p_league_id text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -166,7 +187,7 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- Locked fighters (event underway / past lock time) cannot be dropped.
+      -- Neither side of the swap may be locked into an underway event.
       IF EXISTS (
         SELECT 1 FROM bouts b
         JOIN events e ON e.id = b.event_id
@@ -177,6 +198,21 @@ BEGIN
       ) THEN
         UPDATE waiver_claims SET status = 'invalid',
           failure_reason = 'Drop fighter is locked into a live event', processed_at = now()
+          WHERE id = c.id;
+        v_invalid := v_invalid + 1;
+        CONTINUE;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1 FROM bouts b
+        JOIN events e ON e.id = b.event_id
+        WHERE b.status = 'scheduled'
+          AND e.status <> 'completed'
+          AND (e.status = 'in_progress' OR e.lock_time <= now())
+          AND (b.fighter_a_id = c.add_fighter_id OR b.fighter_b_id = c.add_fighter_id)
+      ) THEN
+        UPDATE waiver_claims SET status = 'invalid',
+          failure_reason = 'Add fighter is locked into a live event', processed_at = now()
           WHERE id = c.id;
         v_invalid := v_invalid + 1;
         CONTINUE;
@@ -197,4 +233,17 @@ BEGIN
   END LOOP;
 
   RETURN jsonb_build_object('won', v_won, 'lost', v_lost, 'invalid', v_invalid);
+END $$;
+
+-- ─── Automatic weekly processing (Mon midnight ET ≈ Tue 05:00 UTC) ───────────
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+DO $$
+BEGIN
+  PERFORM cron.unschedule('process-waivers-weekly')
+  WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'process-waivers-weekly');
+  PERFORM cron.schedule(
+    'process-waivers-weekly',
+    '0 5 * * 2',
+    $job$SELECT public.process_waivers(id) FROM public.leagues WHERE status = 'active'$job$
+  );
 END $$;

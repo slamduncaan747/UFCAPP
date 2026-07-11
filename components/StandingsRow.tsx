@@ -38,7 +38,7 @@ export default function StandingsRow({ manager, rank, isCurrentUser, onClick }: 
             )}
           </h3>
           <div className="text-[10px] text-zinc-400 flex items-center font-bold uppercase tracking-widest">
-            Fighters:&nbsp;
+            Fought:&nbsp;
             <span className="text-white ml-1.5 bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">
               {completed}/9
             </span>

@@ -17,12 +17,12 @@ interface MarketPageProps {
   params: Promise<{ id: string }>;
 }
 
-type SortMode = 'schedule' | 'rank' | 'score' | 'alpha';
+type SortMode = 'schedule' | 'score' | 'record' | 'alpha';
 
 const SORT_LABELS: Record<SortMode, string> = {
   schedule: 'Fights Soon',
-  rank: 'Ranked',
   score: 'Top Rated',
+  record: 'Best Record',
   alpha: 'A–Z',
 };
 
@@ -140,8 +140,11 @@ export default function MarketPage({ params }: MarketPageProps) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const rankValue = (f: Fighter) =>
-      f.is_champion ? -1 : f.current_ranking ?? 999;
+    const rating = (f: Fighter) => f.draft_score ?? -1;
+    const winPct = (f: Fighter) => {
+      const fights = f.record_w + f.record_l + f.record_d;
+      return fights === 0 ? 0 : f.record_w / fights;
+    };
 
     return freeAgents
       .filter((f) => filterClass === 'All' || f.weight_class === filterClass)
@@ -152,13 +155,11 @@ export default function MarketPage({ params }: MarketPageProps) {
       )
       .sort((a, b) => {
         if (sortMode === 'alpha') return a.name.localeCompare(b.name);
-        if (sortMode === 'rank') {
-          const diff = rankValue(a) - rankValue(b);
-          if (diff !== 0) return diff;
-          return (b.draft_score ?? 0) - (a.draft_score ?? 0);
-        }
-        if (sortMode === 'score') {
-          return (b.draft_score ?? -1) - (a.draft_score ?? -1);
+        if (sortMode === 'score') return rating(b) - rating(a);
+        if (sortMode === 'record') {
+          const wins = b.record_w - a.record_w;
+          if (wins !== 0) return wins;
+          return winPct(b) - winPct(a);
         }
         // schedule: booked fighters first by date, then best available.
         const aDate = upcomingMap[a.id]?.event_date;
@@ -166,15 +167,19 @@ export default function MarketPage({ params }: MarketPageProps) {
         if (aDate && bDate) {
           const diff = new Date(aDate).getTime() - new Date(bDate).getTime();
           if (diff !== 0) return diff;
-          return rankValue(a) - rankValue(b);
+          return rating(b) - rating(a);
         }
         if (aDate) return -1;
         if (bDate) return 1;
-        return (b.draft_score ?? -1) - (a.draft_score ?? -1);
+        return rating(b) - rating(a);
       });
   }, [freeAgents, filterClass, search, sortMode, upcomingMap]);
 
   const visible = filtered.slice(0, visibleCount);
+  const pendingAddIds = useMemo(
+    () => new Set(activeBids.map((b) => b.add_fighter_id)),
+    [activeBids]
+  );
 
   return (
     <>
@@ -302,9 +307,9 @@ export default function MarketPage({ params }: MarketPageProps) {
                 key={fighter.id}
                 fighter={fighter}
                 nextBout={upcomingMap[fighter.id] ?? null}
-                disabled={activeBids.length >= 2}
+                disabled={activeBids.length >= 2 || pendingAddIds.has(fighter.id)}
                 onAdd={() => {
-                  if (activeBids.length >= 2) return;
+                  if (activeBids.length >= 2 || pendingAddIds.has(fighter.id)) return;
                   setSelectedAddFighter(fighter);
                 }}
               />

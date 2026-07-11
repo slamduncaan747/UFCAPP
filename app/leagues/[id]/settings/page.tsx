@@ -23,11 +23,12 @@ const SCORING_RULES = [
 ];
 
 const WAIVER_RULES = [
-  'Waivers process every Monday at Midnight EST.',
+  'Waivers process automatically every Monday at Midnight ET.',
   'Priority ordered by lowest total points (highest priority = worst record).',
   'Maximum 1 successful claim per manager per week.',
   'If Priority 1 bid fails, Priority 2 bid is evaluated.',
-  'Bids for locked fighters (already fought) are automatically invalidated.',
+  'The added fighter must fit the vacated slot (or the Wildcard).',
+  'Bids involving locked fighters (event underway) are automatically invalidated.',
 ];
 
 export default function SettingsPage({ params }: SettingsPageProps) {
@@ -111,6 +112,19 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       <div className="bg-[#050507] border-2 border-zinc-800 rounded-2xl p-4 mb-5">
         <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">League</p>
         <h2 className="text-[18px] font-black uppercase tracking-tighter text-white">{league?.name ?? '—'}</h2>
+        {league && (
+          <div className="flex items-center gap-3 mt-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+              Season from{' '}
+              <span className="text-zinc-300">
+                {new Date(`${league.season_start_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500/80">
+              {league.status}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="mb-5">
